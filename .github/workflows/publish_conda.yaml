@@ -1,0 +1,40 @@
+# This workflow builds and uploads a conda package
+
+# Preparation:
+#   - Create a recipe at /conda/meta.yaml
+#   - Visit https://anaconda.org/danionella/settings/access to create a token for read and write access and save it as ANACONDA_TOKEN secret (GitHub settings)
+
+name: Build and Publish Conda Package
+
+on: 
+  workflow_dispatch:
+  # workflow_run:
+  #   workflows: [Build and Publish on PyPI]
+  #   types:
+  #     - completed
+
+jobs:
+  deploy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Sleep for 2 mins
+      run: sleep 120s
+      shell: bash
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        conda install conda-build conda-verify anaconda-client
+    - name: Build
+      run: |
+        conda build -c conda-forge --output-folder . .
+    - name: Upload
+      env:
+        ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+      run: |
+        $CONDA/bin/anaconda upload --label main noarch/*.tar.bz2

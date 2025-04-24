@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my_package"
+version = "0.0.1"
+description = "my_package for Python"
+authors = [
+    { name = "jlab.berlin" },
+]
+license = {text = "MIT"}
+readme = "README.md"
+keywords = ["my_package", "python"]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy","scipy","tqdm"
+]
+
+[project.urls]
+Homepage = "https://github.com/danionella/my_package"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["my_package*"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]

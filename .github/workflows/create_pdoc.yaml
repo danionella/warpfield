@@ -1,0 +1,59 @@
+name: Create pdoc docs for github.pages
+
+# build the documentation whenever there are new commits on main
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  # Alternative: only build for tags.
+  # tags:
+  #   - '*'
+
+# security: restrict permissions for CI jobs.
+permissions:
+  contents: read
+
+jobs:
+  # Build the documentation and upload the static HTML files as an artifact.
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Mambaforge
+          channels: conda-forge
+          auto-activate-base: false
+          activate-environment: docs
+          environment-file: environment.yml
+          use-mamba: true
+      - name: Install pdoc
+        run: |
+          conda activate docs
+          conda install pdoc
+      - name: Run pdoc
+        run: |
+          conda activate docs
+          pdoc --docformat google src/my_package -o docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/
+
+  # Deploy the artifact to GitHub pages.
+  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
