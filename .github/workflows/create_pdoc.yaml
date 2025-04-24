@@ -37,7 +37,7 @@ jobs:
       - name: Run pdoc
         run: |
           conda activate docs
-          pdoc --docformat google src/my_package -o docs
+          pdoc --docformat google src/warpfield -o docs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/
