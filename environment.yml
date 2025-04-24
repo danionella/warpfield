@@ -7,4 +7,8 @@ dependencies:
   - pip
   - numpy
   - scipy
+  - pydantic
   - tqdm
+  - cupy
+  - cuda-version=12.2
+  - rapidsai::rmm

@@ -1,5 +1,5 @@
 # Run: pytest tests/test_all.py
-# All functions to be tested should start with test_ prefix
+# All functions to be tested should start with test_prefix
 
 def test_trivial():
     assert True == True

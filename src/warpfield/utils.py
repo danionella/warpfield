@@ -1,0 +1,140 @@
+import numpy as np
+import cupy as cp
+
+import scipy.ndimage
+
+
+def accumarray(coords, shape, weights=None, clip=False):
+    """ Accumulate values into an array using given coordinates and weights
+
+    Args:
+        coords (array_like): 3-by-n array of coordinates
+        shape (tuple): shape of the output array
+        weights (array_like): weights to be accumulated. If None, all weights are set to 1
+        clip (bool): if True, clip coordinates to the shape of the output array, else ignore out-of-bounds coordinates. Default is False.
+    """
+    assert coords.shape[0] == 3
+    coords = np.round(coords.reshape(3,-1)).astype('int')
+    if clip:
+        for d in len(shape):
+            coords[d] = np.minimum(np.maximum(coords[d], 0), shape[d]-1)
+    else:
+        valid_ix = np.all((coords >= 0) & (coords < np.array(shape)[:,None]), axis=0)
+        coords = coords[:,valid_ix]
+        if weights is not None:
+            weights = weights.ravel()[valid_ix]
+    coords_as_ix = np.ravel_multi_index((*coords,), shape).ravel()
+    accum = np.bincount(coords_as_ix, minlength=np.prod(shape), weights=weights)
+    accum = accum.reshape(shape)
+    return accum
+
+
+def infill_nans(arr, sigma=0.5, truncate=50):
+    """ Infill NaNs in an array using Gaussian basis interpolation
+
+    Args:
+        arr (array_like): input array
+        sigma (float): standard deviation of the Gaussian basis function
+        truncate (float): truncate the filter at this many standard deviations
+    """
+    nans = np.isnan(arr)
+    arr_zeros = arr.copy()
+    arr_zeros[nans] = 0
+    a = scipy.ndimage.gaussian_filter(np.array(arr_zeros, dtype='float64'), sigma=sigma, truncate=truncate)
+    b = scipy.ndimage.gaussian_filter(np.array(~nans, dtype='float64'), sigma=sigma, truncate=truncate)
+    out = (a/b).astype(arr.dtype)
+    return out
+
+
+def sliding_block(data, block_size=100, block_stride=1):
+    """ Create a sliding window/block view into the array with the given block shape and stride. The block slides across all dimensions of the array and extracts subsets of the array at all positions.
+
+    Args: 
+        data (array_like): Array to create the sliding window view from
+        block_size (int or tuple of int): Size of window over each axis that takes part in the sliding block
+        block_stride (int or tuple of int): Stride of teh window along each axis
+
+    Returns:
+        view (ndarray): Sliding block view of the array.
+
+    See Also:
+        numpy.lib.stride_tricks.sliding_window_view
+        numpy.lib.stride_tricks.as_strided
+
+    """
+    block_stride *= np.ones(data.ndim, dtype="int")
+    block_size *= np.ones(data.ndim, dtype="int")
+    shape = np.r_[1 + (data.shape - block_size) // block_stride, block_size]
+    strides = np.r_[block_stride * data.strides, data.strides]
+    xp = cp.get_array_module(data)
+    out = xp.lib.stride_tricks.as_strided(data, shape, strides)
+    return out
+
+
+def upsampled_dft_rfftn(data: cp.ndarray, upsampled_region_size, upsample_factor: int = 1, axis_offsets = None) -> cp.ndarray:
+    """
+    Performs an upsampled inverse DFT on a small region around given offsets,
+    taking as input the output of cupy.fft.rfftn (real-to-complex FFT).
+
+    This implements the Guizar‑Sicairos local DFT upsampling: no full zero‑padding,
+    just a small m×n patch at subpixel resolution.
+
+    Args:
+        data: A real-to-complex FFT array of shape (..., M, Nf),
+            where Nf = N//2 + 1 corresponds to an original real image width N.
+        upsampled_region_size: Size of the output patch (m, n). If an int is
+            provided, the same size is used for both dimensions.
+        upsample_factor: The integer upsampling factor in each axis.
+        axis_offsets: The center of the patch in original-pixel coordinates
+            (off_y, off_x). If None, defaults to (0, 0).
+
+    Returns:
+        A complex-valued array of shape (..., m, n) containing the
+        upsampled inverse DFT patch.
+    """
+    if data.ndim < 2:
+        raise ValueError("Input must have at least 2 dimensions")
+    *batch_shape, M, Nf = data.shape
+    # determine patch size
+    if isinstance(upsampled_region_size, int):
+        m, n = upsampled_region_size, upsampled_region_size
+    else:
+        m, n = upsampled_region_size
+    # full width of original image
+    N = (Nf - 1) * 2
+
+    # default offset: origin
+    off_y, off_x = (0.0, 0.0) if axis_offsets is None else axis_offsets
+
+    # reconstruct full complex FFT via Hermitian symmetry
+    full = cp.empty(batch_shape + [M, N], dtype=cp.complex128)
+    full[..., :Nf] = data
+    if Nf > 1:
+        tail = data[..., :, 1:-1]
+        full[..., Nf:] = tail[..., ::-1, ::-1].conj()
+
+    # flatten batch dims for computation
+    flat = full.reshape(-1, M, N)
+
+    # frequency coordinates
+    fy = cp.fft.fftfreq(M)[None, :]  # shape (1, M)
+    fx = cp.fft.fftfreq(N)[None, :]  # shape (1, N)
+
+    # sample coordinates around offsets
+    y_idx = cp.arange(m) - (m // 2)
+    x_idx = cp.arange(n) - (n // 2)
+    y_coords = off_y[:, None] + y_idx[None, :] / upsample_factor  # (B, m)
+    x_coords = off_x[:, None] + x_idx[None, :] / upsample_factor  # (B, n)
+
+
+    # Build small inverse‐DFT kernels
+    # ky: (B, m, M), kx: (B, n, N)
+    ky = cp.exp(2j * cp.pi * y_coords[:, :, None] * fy[None, :, :])
+    kx = cp.exp(2j * cp.pi * x_coords[:, :, None] * fx[None, :, :])
+
+    # First apply along y: (B,m,M) × (B,M,N) -> (B,m,N)
+    out1 = cp.einsum('b m M, b M N -> b m N', ky, full)
+    # Then along x: (B,m,N) × (B,n,N)ᵀ -> (B,m,n)
+    patch = cp.einsum('b m N, b n N -> b m n', out1, kx)
+
+    return patch
