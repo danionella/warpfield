@@ -449,13 +449,13 @@ class LevelConfig(BaseModel):
         affinify (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
     """
-    block_size: Union[List[int]] = [-5, -5, -5]
+    block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
-    repeat:int = 1
-    smooth:Union[Smoother, None] = Smoother()
     project:Projector = Projector()
+    smooth:Union[Smoother, None] = Smoother()
     affinify:bool = False
     median_filter:bool = True
+    repeat:int = 1
 
 
 class Recipe(BaseModel):
