@@ -46,6 +46,55 @@ vol_mov = np.load("moving_volume.npy")
 # 2. Choose registration recipe
 # set up recipe
 
+recipe = warpfield.recipes.from_yaml('default.yml')
+
+# 3. Register moving volume
+registered_vol, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
+
+# 5. Optional: apply the warp transformation to another volume
+registered_vol_2 = warp_map.unwarp(vol_mov_2)
+
+# 6. Optional: apply the warp transformation to a set of points (3-by-n array)
+points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+points_pushed = warp_map.push_coordinates(points)
+points_pulled = warp_map.pull_coordinates(points) # inverse transformation
+```
+
+## Recipes
+
+The registration pipeline is defined by a recipe. The recipe consists of a pre-filter (`RegFilter`) that is applied to all volumes (typically a DoG filter to sharpen features) and list of level descriptors (`LevelConfig`), each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the input volume, with the first level being the coarsest and the last level being the finest.
+
+### Recipe parameters
+
+| Pre-filter parameter      | Description                                                                 |
+|-------------------|-----------------------------------------------------------------------------|
+| `clip_thresh`     | Threshold for clipping each volume. Default is 0                  |
+| `dog`             | If True, apply a 3D DoG pre-filter to each volume. Default is True                 |
+| `low`             | The lower sigma value for the DoG pre-filter. Default is 0.5                   |
+| `high`            | The higher sigma value for the DoG pre-filter. Default is 10.0                 |
+
+
+| Level parameter      | Description                                                                 |
+|-------------------|-----------------------------------------------------------------------------|
+| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape (e.g. [32, 16, 32]), whle negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5])|
+| `block_stride`    | Stride. Either list of int stride sizes or float (fraction of block_size). Default is 1. Set to smaller value – e.g. 0.5 – for higher precision, but larger memory footprint   |
+| `project.max`     | If True, apply a max filter to the volume block. Default is True           |
+| `project.dog`     | If True, apply a DoG filter to the volume block. Default is True           |
+| `project.low`     | The lower sigma value for the 2D DoG filter. Default is 0.5 voxels. (Note: A sigma of 1 correponds to a FWHM of ~ 2.4. The low and high sigmas should be smaller and bigger than the feature of interest. )                    |
+| `project.high`    | The higher sigma value for the 2D DoG filter. Default is 10.0 voxels               |
+| `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
+| `smooth.truncate` | Truncate parameter for gaussian kernel. Default is 5 blocks.                      |
+| `smooth.shear`    | Shear parameter for gaussian kernel. Default is None.                      |
+| `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. |
+| `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
+| `affinify`        | If True, apply affine transformation to the displacement field. Default is False          |
+| `repeat`          | Number of iterations for this level. Default is 1         |
+
+
+### Defining recipes
+
+Recipes can be defined by interacting with the `Recipe` class:
+```python
 recipe = Recipe(
     pre_filter= RegFilter(clip_thresh=10),
     levels=[
@@ -56,33 +105,23 @@ recipe = Recipe(
                     median_filter=False,
                     repeat=20
                    ),
-        LevelConfig(block_size=[-20, -10, -40], 
+        LevelConfig(block_size=[-10, -10, -10], 
                     smooth=Smoother(sigmas=[2, 2, 2]), 
                     project=Projector(low=2, high=10), 
-                    repeat=10),
-        LevelConfig(block_size=[32, 8, 32], 
+                    repeat=10),        
+        LevelConfig(block_size=[32, 32, 32], 
                     block_stride=0.5,
-                    smooth=Smoother(sigmas=[4, 4, 4], long_range_ratio=0.01), 
-                    project=Projector(low=1, high=2),
-                    repeat=3),
+                    smooth=Smoother(sigmas=[2, 2, 2]), 
+                    project=Projector(low=0.5, high=2), 
+                    repeat=5),
     ]
 )
-
-rp = RegistrationPyramid(vol_ref, recipe=recipe)
-
-# 3. Register a new volume
-registered_vol, warp_map, _ = rp.register_single(vol_mov)
-
-# 4. Apply the combined warp to another volume
-registered_vol_2 = warp_map.unwarp(vol_mov_2)
-
-# 5. clear GPU memory
-del rp
 ```
 
-## Contributing
+or loading from a YAML file: 
 
-- Fork the repo and/or create a feature branch.
-- Use Google style docstrings.
-- Write tests for new functionality.
-- Submit a pull request—CI will run linting & tests automatically.
+```python
+recipe = warpfield.recipes.from_yaml("path/to/recipe.yaml")
+```
+
+See [default.yml](./src/warpfield/recipes/default.yml) for an example recipe YML file.
