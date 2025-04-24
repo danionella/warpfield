@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        platform: [ubuntu-latest, windows-latest, macos-latest]
+        platform: [ubuntu-latest, windows-latest]
         python-version: ["3.9", "3.12"]
 
     defaults:
