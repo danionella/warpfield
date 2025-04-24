@@ -346,6 +346,28 @@ class RegistrationPyramid:
         if was_numpy:
             vol = vol.get()
         return vol, warp_map, callback_output
+    
+
+def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
+    """ Register a volume to a reference volume using a registration pyramid.
+
+    Args:
+        ref (numpy.array or cupy.array): Reference volume
+        vol (numpy.array or cupy.array): Volume to be registered
+        recipe (Recipe): Registration recipe
+        reg_mask (numpy.array): Mask for registration
+        callback (function): Callback function to be called after each level of registration
+        verbose (bool): If True, show progress bars
+
+    Returns:
+        numpy.array or cupy.array: Registered volume
+        WarpMap: Displacement field
+        list: List of outputs from the callback function
+    """
+    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
+    registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
+    cp.fft.config.get_plan_cache().clear()
+    return registered_vol, warp_map, cbout
 
 
 class Projector(BaseModel):
