@@ -5,10 +5,10 @@ channels:
 dependencies:
   - python>=3.9
   - pip
-  - numpy
+  - numpy<2
   - scipy
   - pydantic
   - pyyaml
   - tqdm
-  - cupy
+  - cupy<13.3
   - cuda-version=12.2
