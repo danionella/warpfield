@@ -24,35 +24,35 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 
 ## Installation
 
-You can install warpfield via **conda** or **mamba**.
-
+We recommend installing all dependencies via **conda** or **mamba**. Adjust cuda-version in `environment.yml` to your system, if needed.
 
 ```bash
-# Create & activate a new environment
+# Change into the repository root directory, then type:
 mamba create -n warpfield -f environment.yml
 mamba activate warpfield
-# Change into repository root directory
 pip install -e .
 ```
 
 ## Quickstart
 ```python
-from warpfield.register import Recipe, RegFilter, LevelConfig, Smoother, Projector, RegistrationPyramid
+import warpfield 
 
 # 1. Load data
 vol_ref = np.load("reference_volume.npy")
 vol_mov = np.load("moving_volume.npy")
 
-# 2. Choose registration recipe
-# set up recipe
-
+# 2. Choose registration recipe (here: loaded from a YAML file. See below for alternative ways)
 recipe = warpfield.recipes.from_yaml('default.yml')
 
 # 3. Register moving volume
-registered_vol, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
+vol_mov_pulled, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
 
 # 5. Optional: apply the warp transformation to another volume
-registered_vol_2 = warp_map.unwarp(vol_mov_2)
+vol_ref_pushed = warp_map.unwarp(vol_ref)
+
+# 4. Optional: apply inverse transformation 
+
+vol0_inv = warp_map.invert_fast().unwarp(vol1)
 
 # 6. Optional: apply the warp transformation to a set of points (3-by-n array)
 points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
@@ -85,7 +85,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.truncate` | Truncate parameter for gaussian kernel. Default is 5 blocks.                      |
 | `smooth.shear`    | Shear parameter for gaussian kernel. Default is None.                      |
-| `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. |
+| `smooth.long_range_ratio` | Long range ratio (0..1) for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. |
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
 | `affinify`        | If True, apply affine transformation to the displacement field. Default is False          |
 | `repeat`          | Number of iterations for this level. Default is 1         |
@@ -95,6 +95,8 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 Recipes can be defined by interacting with the `Recipe` class:
 ```python
+from warpfield.register import Recipe, RegFilter, LevelConfig, Smoother, Projector, RegistrationPyramid
+
 recipe = Recipe(
     pre_filter= RegFilter(clip_thresh=10),
     levels=[
