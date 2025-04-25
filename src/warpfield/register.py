@@ -1,4 +1,5 @@
 from typing import List, Union
+import gc
 
 import numpy as np
 import scipy.signal
@@ -376,7 +377,9 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
     """
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
+    del reg; gc.collect()
     cp.fft.config.get_plan_cache().clear()
+    cp.get_default_memory_pool().free_all_blocks()
     return registered_vol, warp_map, cbout
 
 
