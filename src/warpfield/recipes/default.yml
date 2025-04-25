@@ -4,7 +4,7 @@ dog: true
 low: 0.5
 high: 10.0
 levels:
-  - block_size: [-5, -5, -5]
+  - block_size: [-5, -5, -5] #affine filter. keep block size. Maybe adjust project low/high sigmas
     project:
       low: 2.0
       high: 10.0
@@ -13,21 +13,20 @@ levels:
     median_filter: false
     affinify: true
     repeat: 20
-  - block_size: [-20, -10, -40]
+  - block_size: [64, 16, 64]
     project:
       low: 2.0
       high: 10.0
     smooth:
       sigmas: [2.0, 2.0, 2.0]
-      long_range_ratio: 0.05
-    median_filter: false
-    repeat: 10
-  - block_size: [32, 32, 32]
+      long_range_ratio: 0.1
+    repeat: 5
+  - block_size: [32, 8, 32]
     block_stride: 0.5
     project:
       low: 1.0
       high: 2.0
     smooth:
       sigmas: [4.0, 4.0, 4.0]
-      long_range_ratio: 0.05
+      long_range_ratio: 0.1
     repeat: 5
