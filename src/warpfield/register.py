@@ -154,7 +154,7 @@ class WarpMap:
             inv_field[i] = infill_nans(inv_field[i], sigma=sigma, truncate=truncate)
         return WarpMap(inv_field, self.block_size, self.block_stride)
 
-    def push_coordinates(self, coords, pull=False):
+    def push_coordinates(self, coords, negative_shifts=False):
         """ Push coordinates through the warp field
 
         Args:
@@ -171,12 +171,12 @@ class WarpMap:
         shifts = cp.zeros_like(coords)
         for idim in range(3):
             shifts[idim] = cupyx.scipy.ndimage.map_coordinates(warp_field[idim], coords_blocked, order=1, mode='nearest')
-        if pull:
+        if negative_shifts:
             shifts = -shifts
         return coords + shifts
     
     def pull_coordinates(self, coords):
-        return self.invert_accum().push_coordinates(coords, pull=True)
+        return self.invert_fast().push_coordinates(coords, negative_shifts=True)
         
     def as_ants_image(self, voxel_size_um=1):
         """ Convert to ANTsImage
