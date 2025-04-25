@@ -375,6 +375,7 @@ class Projector(BaseModel):
     
     Parameters:
         max: if True, apply a max filter to the volume block. Default is True
+        normalize: if True, normalize projections by the L2 norm (to get correlations, not covariances). Default is False
         dog: if True, apply a DoG filter to the volume block. Default is True
         low: the lower sigma value for the DoG filter. Default is 0.5
         high: the higher sigma value for the DoG filter. Default is 10.0
@@ -382,6 +383,7 @@ class Projector(BaseModel):
         gauss_env: if True, apply a Gaussian window to the output. Default is False
     """
     max: bool = True
+    normalize: bool = False
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
@@ -393,6 +395,8 @@ class Projector(BaseModel):
             out = vol_blocks.max(axis)
         else:       
             out = vol_blocks.mean(axis)
+        if self.normalize > 0:
+           out /= (cp.sqrt(cp.sum(out**2, axis=(-2,-1), keepdims=True))**self.normalize + 1e-9)
         if self.tukey_env:
             out *= cp.array(scipy.signal.windows.tukey(out.shape[-1], alpha=0.5)[None, None, None, None, :], dtype=out.dtype)
             out *= cp.array(scipy.signal.windows.tukey(out.shape[-2], alpha=0.5)[None, None, None, :, None], dtype=out.dtype)
