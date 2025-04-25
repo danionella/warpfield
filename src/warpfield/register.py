@@ -40,7 +40,7 @@ class WarpMap:
             cupy.array: warped volume
         """
         vol_out = unwarp_volume(
-            cp.array(vol, dtype='float32'),
+            vol,
             self.warp_field,
             self.block_stride,
             cp.array(-self.block_size / self.block_stride / 2),
