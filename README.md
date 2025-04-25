@@ -92,7 +92,44 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 ### Defining recipes
 
-Recipes can be defined by interacting with the `Recipe` class:
+Or loading from a YAML file (either included in the package or your own): 
+
+```python
+recipe = warpfield.recipes.from_yaml("default.yml")
+# or your own recipe:
+# recipe = warpfield.recipes.from_yaml("path/to/your/recipe.yaml")
+```
+
+You can then modify the recipe parameters as needed (this is a convenient option as long as the number of levels doesn't change). For example:
+
+```python
+recipe.pre_filter.clip_thresh=10
+
+recipe.levels[0].block_size = [-5,-5,-5]
+recipe.levels[0].smooth.sigmas=[1,1,1]
+recipe.levels[0].affinify = True
+recipe.levels[0].median_filter = False
+recipe.levels[0].repeat = 10
+
+recipe.levels[1].block_size = [-20,-10,-40]
+recipe.levels[1].smooth.sigmas=[2,2,2]
+recipe.levels[1].smooth.long_range_ratio = 0.05
+recipe.levels[1].repeat = 5
+
+recipe.levels[2].block_size = [32, 8, 32]
+recipe.levels[2].block_stride = 0.5
+recipe.levels[2].smooth.sigmas=[4,4,4]
+recipe.levels[2].smooth.long_range_ratio = 0.1
+recipe.levels[2].project.low = 1
+recipe.levels[2].project.high = 2
+recipe.levels[2].repeat = 5
+
+print(f'recipe has {len(recipe.levels)} levels')
+```
+
+
+Alternatively, you can define a recipe from scratch using the `Recipe` class and its components. For example:
+
 ```python
 from warpfield.register import Recipe, RegFilter, LevelConfig, Smoother, Projector, RegistrationPyramid
 
@@ -117,12 +154,6 @@ recipe = Recipe(
                     repeat=5),
     ]
 )
-```
-
-or loading from a YAML file: 
-
-```python
-recipe = warpfield.recipes.from_yaml("path/to/recipe.yaml")
 ```
 
 See [default.yml](./src/warpfield/recipes/default.yml) for an example recipe YML file.
