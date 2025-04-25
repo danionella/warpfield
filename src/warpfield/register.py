@@ -30,7 +30,7 @@ class WarpMap:
         else:
             self.block_stride = cp.array(block_stride, dtype='float32')
 
-    def unwarp(self, vol):
+    def unwarp(self, vol, out=None):
         """ Apply the warp to a volume
 
         Args:
@@ -44,6 +44,7 @@ class WarpMap:
             self.warp_field,
             self.block_stride,
             cp.array(-self.block_size / self.block_stride / 2),
+            out=out,
         )
         return vol_out
 
@@ -273,7 +274,7 @@ class WarpMapper:
             disp_field[0, 0] + disp_field[2, 1],
             disp_field[0, 1] + disp_field[1, 1],
         ]).astype("float32") / 2)
-        return WarpMap(disp_field, block_size=self.block_size, block_stride=self.block_stride), xcorr_proj
+        return WarpMap(disp_field, block_size=self.block_size, block_stride=self.block_stride)
 
 
 class RegistrationPyramid:
@@ -330,7 +331,7 @@ class RegistrationPyramid:
         vol_tmp = vol_tmp0.copy()
         for k, mapper in enumerate(tqdm(self.mappers, desc=f"Levels", disable=not verbose)):
             for _ in tqdm(range(self.recipe.levels[self.mapper_ix[k]].repeat), leave=False, desc=f"Repeats", disable=not verbose):
-                dm, _ = mapper.get_displacement(vol_tmp, #* self.reg_mask,
+                dm = mapper.get_displacement(vol_tmp, #* self.reg_mask,
                                                 smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth)
                 if self.recipe.levels[self.mapper_ix[k]].affinify:
                     dm = dm.affinify()[0]
@@ -342,7 +343,7 @@ class RegistrationPyramid:
                     warp_map = WarpMap(dm.warp_field.copy(), dm.block_size.copy(), dm.block_stride.copy())
                 else:
                     warp_map = warp_map.chain(dm)
-                vol_tmp = warp_map.unwarp(vol_tmp0)
+                warp_map.unwarp(vol_tmp0, out = vol_tmp)
                 if callback is not None:
                     #callback_output.append(callback(warp_map.unwarp(vol)))
                     callback_output.append(callback(vol_tmp))
