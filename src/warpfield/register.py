@@ -136,7 +136,7 @@ class WarpMap:
                                                 warp_field_coords.reshape(3,-1).T, method=method).reshape(warp_field.shape[1:]) 
         return WarpMap(out, block_size)
     
-    def invert_accum(self, sigma=.5, truncate=20):
+    def invert_fast(self, sigma=.5, truncate=20):
         """ Invert the displacement field using accumulation and Gaussian basis interpolation.
 
         Returns:
