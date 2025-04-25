@@ -253,16 +253,20 @@ class WarpMapper:
 
             max_ix = cp.array(cp.unravel_index(cp.argmax(xcorr_proj, axis=(-2, -1)), xcorr_proj.shape[-2:]))
             max_ix = max_ix - cp.array(xcorr_proj.shape[-2:])[:, None, None, None] // 2
+            del xcorr_proj
             i0, j0 = max_ix.reshape(2,-1)
             shifts = upsampled_dft_rfftn(
                 R.reshape(-1, *R.shape[-2:]),
-                upsampled_region_size=self.subpixel*2+1,
+                upsampled_region_size=int(self.subpixel*2+1),
                 upsample_factor=self.subpixel,
                 axis_offsets=(i0, j0)
-            )  # returns shape (B, m, n)
+            )
+            del R
             max_sub = cp.array(cp.unravel_index(cp.argmax(shifts, axis=(-2, -1)), shifts.shape[-2:]))
             max_sub = (max_sub.reshape(max_ix.shape) - cp.array(shifts.shape[-2:])[:, None,None,None] // 2) / self.subpixel
+            del shifts
             disp_field.append(max_ix + max_sub)
+            
         disp_field = cp.array(disp_field)
         disp_field = (cp.array([
             disp_field[1, 0] + disp_field[2, 0],
