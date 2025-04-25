@@ -47,6 +47,11 @@ class WarpMap:
             out=out,
         )
         return vol_out
+    
+    def apply(self, vol, out=None):
+        """ Alias of unwarp method
+        """
+        return self.unwarp(vol, out=out)
 
     def affinify(self):
         """ Fit affine transformation and return new fitted WarpMap
