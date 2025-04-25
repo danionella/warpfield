@@ -7,7 +7,7 @@
 
 # warpfield
 
-A GPU-accelerated Python library for block-wise volumetric image registration and warping.
+A GPU-accelerated Python library for non-rigid volumetric image registration / warping.
 
 Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repository](https://github.com/danionella/warpfield)
 
@@ -41,7 +41,7 @@ import warpfield
 vol_ref = np.load("reference_volume.npy")
 vol_mov = np.load("moving_volume.npy")
 
-# 2. Choose registration recipe (here: loaded from a YAML file. See below for alternative ways)
+# 2. Choose registration recipe (here: loaded from a YAML file. See below for alternatives)
 recipe = warpfield.recipes.from_yaml('default.yml')
 
 # 3. Register moving volume
