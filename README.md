@@ -51,7 +51,6 @@ vol_mov_pulled, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, 
 vol_ref_pushed = warp_map.unwarp(vol_ref)
 
 # 4. Optional: apply inverse transformation 
-
 vol0_inv = warp_map.invert_fast().unwarp(vol1)
 
 # 6. Optional: apply the warp transformation to a set of points (3-by-n array)
@@ -84,7 +83,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `project.high`    | The higher sigma value for the 2D DoG filter. Default is 10.0 voxels               |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.truncate` | Truncate parameter for gaussian kernel. Default is 5 blocks.                      |
-| `smooth.shear`    | Shear parameter for gaussian kernel. Default is None.                      |
+| `smooth.shear`    | Shear parameter (specific to oblique plane wobble). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio (0..1) for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. |
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
 | `affinify`        | If True, apply affine transformation to the displacement field. Default is False          |
