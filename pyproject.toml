@@ -19,6 +19,7 @@ dependencies = [
     "cupy",
     "tqdm",
     "pydantic",
+    "pyyaml"
 ]
 
 [project.urls]
