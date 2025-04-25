@@ -107,14 +107,11 @@ def upsampled_dft_rfftn(data: cp.ndarray, upsampled_region_size, upsample_factor
     off_y, off_x = (0.0, 0.0) if axis_offsets is None else axis_offsets
 
     # reconstruct full complex FFT via Hermitian symmetry
-    full = cp.empty(batch_shape + [M, N], dtype=cp.complex128)
+    full = cp.empty(batch_shape + [M, N], dtype=cp.complex64)
     full[..., :Nf] = data
     if Nf > 1:
         tail = data[..., :, 1:-1]
         full[..., Nf:] = tail[..., ::-1, ::-1].conj()
-
-    # flatten batch dims for computation
-    flat = full.reshape(-1, M, N)
 
     # frequency coordinates
     fy = cp.fft.fftfreq(M)[None, :]  # shape (1, M)
@@ -126,15 +123,13 @@ def upsampled_dft_rfftn(data: cp.ndarray, upsampled_region_size, upsample_factor
     y_coords = off_y[:, None] + y_idx[None, :] / upsample_factor  # (B, m)
     x_coords = off_x[:, None] + x_idx[None, :] / upsample_factor  # (B, n)
 
-
     # Build small inverse‐DFT kernels
-    # ky: (B, m, M), kx: (B, n, N)
-    ky = cp.exp(2j * cp.pi * y_coords[:, :, None] * fy[None, :, :])
-    kx = cp.exp(2j * cp.pi * x_coords[:, :, None] * fx[None, :, :])
+    ky = cp.exp(2j * cp.pi * y_coords[:, :, None] * fy[None, :, :]).astype('complex64')
+    kx = cp.exp(2j * cp.pi * x_coords[:, :, None] * fx[None, :, :]).astype('complex64')
 
     # First apply along y: (B,m,M) × (B,M,N) -> (B,m,N)
     out1 = cp.einsum('b m M, b M N -> b m N', ky, full)
     # Then along x: (B,m,N) × (B,n,N)ᵀ -> (B,m,n)
     patch = cp.einsum('b m N, b n N -> b m n', out1, kx)
 
-    return patch
+    return patch.real.reshape(*batch_shape, m, n)
