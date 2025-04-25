@@ -14,9 +14,9 @@ readme = "README.md"
 keywords = ["warpfield", "python"]
 requires-python = ">=3.9"
 dependencies = [
-    "numpy",
+    "numpy<2",
     "scipy",
-    "cupy",
+    "cupy<13.3",
     "tqdm",
     "pydantic",
     "pyyaml"
