@@ -28,7 +28,7 @@ We recommend installing all dependencies via **conda** or **mamba**. Adjust cuda
 
 ```bash
 # Change into the repository root directory, then type:
-mamba create -n warpfield -f environment.yml
+mamba env create -n warpfield -f environment.yml
 mamba activate warpfield
 pip install -e .
 ```
