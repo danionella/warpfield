@@ -45,13 +45,13 @@ vol_mov = np.load("moving_volume.npy")
 recipe = warpfield.recipes.from_yaml('default.yml')
 
 # 3. Register moving volume
-vol_mov_pulled, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
-
-# 5. Optional: apply the warp transformation to another volume
-vol_ref_pushed = warp_map.unwarp(vol_ref)
+vol_mov_reg, warp_map = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
 
 # 4. Optional: apply inverse transformation 
-vol0_inv = warp_map.invert_fast().unwarp(vol1)
+vol_ref_reg = warp_map.invert_fast().unwarp(vol_ref)
+
+# 5. Optional: apply the warp transformation to another volume
+vol_another_reg = warp_map.unwarp(vol_another)
 
 # 6. Optional: apply the warp transformation to a set of points (3-by-n array)
 points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
