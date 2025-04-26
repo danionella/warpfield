@@ -19,6 +19,8 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Piece-wise rigid registration via block-wise cross-correlation
 - Fast Difference-of-Gaussian (DoG) filtering and a variety of projection methods (max, mean, max_dog, etc.)  
 - `WarpMap` class to represent, compose, invert, and apply displacement fields  
+- Support for .h5, .npy, .nii and .dcm file formats
+- Python API and command-line interface (CLI)
 
 ---
 
