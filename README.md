@@ -128,7 +128,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 ### Defining recipes
 
-Or loading from a YAML file (either included in the package or your own): 
+Recipes can be loaded from YAML files (either those shipped with the package or your own): 
 
 ```python
 recipe = warpfield.recipes.from_yaml("default.yml")
