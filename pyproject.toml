@@ -19,7 +19,11 @@ dependencies = [
     "cupy<13.3",
     "tqdm",
     "pydantic",
-    "pyyaml"
+    "pyyaml",
+    "h5py",
+    "hdf5plugin",
+    "nibabel",
+    "pydicom",
 ]
 
 [project.urls]

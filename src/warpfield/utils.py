@@ -1,7 +1,63 @@
 import numpy as np
 import cupy as cp
-
 import scipy.ndimage
+
+import h5py
+import hdf5plugin
+
+
+def import_data(file_path: str):
+    """
+    Import data from various file types, including .npy, .nii, .h5, .mat, DICOM, and TIFF.
+
+    Args:
+        file_path (str): Path to the file. For HDF5 and MATLAB files, you can specify the group/key or variable
+                         using the format '/path/to/file.h5:/group/key' or '/path/to/file.mat:variable_name'.
+
+    Returns:
+        np.ndarray: Loaded data as a NumPy array.
+    """
+    if file_path.endswith('.npy'):
+        return np.load(file_path)
+
+    elif '.h5:' in file_path or '.hdf5:' in file_path:
+        file_path, key = file_path.split(':', 1)
+        with h5py.File(file_path, 'r') as f:
+            return np.array(f[key])
+
+    elif '.mat:' in file_path:
+        from scipy.io import loadmat
+        file_path, variable_name = file_path.split(':', 1)
+        mat_data = loadmat(file_path)
+        if variable_name not in mat_data:
+            raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
+        return mat_data[variable_name]
+    
+    elif file_path.endswith('.nii') or file_path.endswith('.nii.gz'):
+        try:
+            import nibabel as nib
+        except ImportError:
+            raise ImportError("The 'nibabel' package is required to load NIfTI files. Please install it.")
+        nii = nib.load(file_path)
+        return np.asanyarray(nii.get_fdata())
+
+    elif file_path.endswith('.dcm'):
+        try:
+            import pydicom
+        except ImportError:
+            raise ImportError("The 'pydicom' package is required to load DICOM files. Please install it.")
+        dicom = pydicom.dcmread(file_path)
+        return dicom.pixel_array
+
+    elif file_path.endswith('.tiff') or file_path.endswith('.tif'):
+        try:
+            import tifffile
+        except ImportError:
+            raise ImportError("The 'tifffile' package is required to load TIFF files. Please install it.")
+        return tifffile.imread(file_path)
+
+    else:
+        raise ValueError(f"Unsupported file type: {file_path}")
 
 
 def accumarray(coords, shape, weights=None, clip=False):
