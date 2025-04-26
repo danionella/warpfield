@@ -59,6 +59,40 @@ points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 ```
 
+## Command-Line Interface (CLI)
+
+The `warpfield` library provides a command-line interface. This allows you to perform registration directly from the terminal without writing Python code.
+
+#### Usage
+
+```bash
+python -m warpfield --fixed <fixed_image_path> --moving <moving_image_path> --recipe <recipe_path> [options]
+# You can use the `--help` flag to see detailed instructions for the CLI:
+python -m warpfield --help
+```
+
+#### Required Arguments
+
+- `--fixed`: Path to the fixed image/volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
+- `--moving`: Path to the moving image/volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
+- `--recipe`: Path to the recipe YAML file for registration.
+
+#### Optional Arguments
+
+- `--output`: Path to save the registered image/volume. Defaults to `<moving>_registered.h5` if not provided.
+- `--compression`: Compression method for saving the registered volume. Default is `gzip`.
+- `--invert`: Additionally, register the moving image to the fixed image.
+
+#### Output Structure
+
+The output file is an HDF5 file containing the following datasets:
+- `/moving_reg`: The registered moving image.
+- `/warp_map`: A group containing the warp field and its metadata:
+  - `/warp_field`: The displacement field.
+  - `/block_size`: The block size (in voxels).
+  - `/block_stride`: The block stride (in voxels).
+- `/fixed_reg_inv` (optional): The fixed image registered to the moving image (if `--invert` is used).
+
 ## Recipes
 
 The registration pipeline is defined by a recipe. The recipe consists of a pre-filter (`RegFilter`) that is applied to all volumes (typically a DoG filter to sharpen features) and list of level descriptors (`LevelConfig`), each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the input volume, with the first level being the coarsest and the last level being the finest.
