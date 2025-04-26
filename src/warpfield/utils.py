@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import cupy as cp
 import scipy.ndimage
@@ -38,6 +40,7 @@ def import_data(file_path: str):
             import nibabel as nib
         except ImportError:
             raise ImportError("The 'nibabel' package is required to load NIfTI files. Please install it.")
+        warnings.warn("The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
         nii = nib.load(file_path)
         return np.asanyarray(nii.get_fdata())
 
@@ -46,6 +49,7 @@ def import_data(file_path: str):
             import pydicom
         except ImportError:
             raise ImportError("The 'pydicom' package is required to load DICOM files. Please install it.")
+        warnings.warn("The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
         dicom = pydicom.dcmread(file_path)
         return dicom.pixel_array
 
