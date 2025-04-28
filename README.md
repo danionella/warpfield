@@ -206,16 +206,7 @@ recipe = Recipe(
 )
 ```
 
-## Under the Hood
+## See also
 
-### General Principle
-
-The registration process aligns a "moving" 3D volume to a "fixed" reference volume by estimating and applying a displacement field. The displacement field describes how each voxel in the moving volume should be shifted to match the fixed volume. The process is typically performed in a multi-resolution (pyramid) fashion, starting with coarse alignment and progressively refining the displacement field at finer resolutions.
-
-The key steps are:
-
-1. **Preprocessing**: Enhance features in the volumes (e.g., using Difference-of-Gaussian filtering) to improve registration accuracy.
-2. **Block Matching**: Divide the volumes into blocks, project them into 2D for memory and compute efficiency, and calculate 2D cross-correlation maps. After smoothing these 2D maps across neighboring blocks, use their maxima to determine the 3D block-level displacement vector.
-3. **Displacement Field Estimation**: Combine block-level displacement vectors into a displacement field (and optionaly apply a median filter or fit an affine transform)
-4. **Warping**: Apply the displacement field to the moving volume to align it with the fixed volume.
-5. **Multi-Resolution Refinement**: Repeat the above steps at progressively finer resolutions to refine the alignment.
+- [Advanced Normalization Tools in Python (ANTsPy)](https://github.com/ANTsX/ANTsPy)
+- [Computational Morphometry Toolkit (CMTK)](https://www.nitrc.org/projects/cmtk)
