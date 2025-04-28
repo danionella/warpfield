@@ -7,7 +7,9 @@ name = "warpfield"
 version = "0.0.1"
 description = "GPU-accelerated 3D non-rigid registration"
 authors = [
-    { name = "jlab.berlin" },
+    {name = "jlab.berlin"},
+    {name = "Maximilian Hoffmann"},
+    {name = "Benjamin Judkewitz"},
 ]
 license = {text = "MIT"}
 readme = "README.md"
