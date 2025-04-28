@@ -11,7 +11,7 @@ A GPU-accelerated Python library for non-rigid volumetric image registration / w
 
 Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repository](https://github.com/danionella/warpfield)
 
-## Features
+### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
 - `WarpMap` class to represent, compose, invert, and apply displacement fields
@@ -19,7 +19,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
 
-## General Principle
+### General Principle
 
 The registration process aligns a moving 3D volume to a fixed reference volume by estimating and applying a displacement field. The process is typically performed in a multi-resolution (pyramid) fashion, starting with coarse alignment and progressively refining the displacement field at finer resolutions.
 
