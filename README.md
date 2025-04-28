@@ -16,13 +16,19 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ## Features
 
 - GPU-accelerated kernels (CuPy, CuPy RawKernels & FFT plans) for high performance  
-- Piece-wise rigid registration via block-wise cross-correlation
-- Fast Difference-of-Gaussian (DoG) filtering and a variety of projection methods (max, mean, max_dog, etc.)  
+- Non-rigid registration via block-wise rigid cross-correlation
 - `WarpMap` class to represent, compose, invert, and apply displacement fields  
+- Fast Difference-of-Gaussian (DoG) filtering and a variety of projection methods (max, mean, max_dog, etc.)  
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
 
 ---
+
+## Hardware requirement
+
+- A computer running Linux (recommended) or Windows
+- A CUDA-compatible GPU with sufficient GPU memory: ≥ 40 bytes per voxel (40 GB / gigavoxel) of your 3D volume
+
 
 ## Installation
 
