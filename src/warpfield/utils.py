@@ -27,7 +27,8 @@ def import_data(file_path: str):
         return data, dict(filetype='npy', path=file_path, meta={})
 
     elif '.h5:' in file_path or '.hdf5:' in file_path:
-        file_path, key = file_path.split(':', 1)
+        split_index = file_path.rfind(':')  # Find the last colon
+        file_path, key = file_path[:split_index], file_path[split_index + 1:]
         with h5py.File(file_path, 'r') as f:
             data = np.array(f[key])
             attrs = dict(f[key].attrs)  # Extract attributes as metadata
