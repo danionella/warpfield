@@ -16,3 +16,4 @@ dependencies:
   - hdf5plugin
   - nibabel
   - pydicom
+  - tifffile

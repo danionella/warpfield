@@ -24,6 +24,7 @@ dependencies = [
     "hdf5plugin",
     "nibabel",
     "pydicom",
+    "tifffile",
 ]
 
 [project.urls]
