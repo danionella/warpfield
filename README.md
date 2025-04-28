@@ -126,7 +126,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.truncate` | Truncate parameter for gaussian kernel. Default is 5 blocks.                      |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble). Default is None.                      |
-| `smooth.long_range_ratio` | Long range ratio (0..1) for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. |
+| `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
 | `affinify`        | If True, apply affine transformation to the displacement field. Default is False          |
 | `repeat`          | Number of iterations for this level. Default is 1         |
@@ -134,7 +134,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 ### Defining recipes
 
-Recipes can be loaded from YAML files (either those shipped with the package or your own): 
+Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](./src/warpfield/recipes/default.yml), or your own): 
 
 ```python
 recipe = warpfield.recipes.from_yaml("default.yml")
@@ -198,4 +198,3 @@ recipe = Recipe(
 )
 ```
 
-See [default.yml](./src/warpfield/recipes/default.yml) for an example recipe YML file.
