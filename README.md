@@ -24,7 +24,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 
 ---
 
-## Hardware requirement
+## Hardware requirements
 
 - A computer running Linux (recommended) or Windows
 - A CUDA-compatible GPU with sufficient GPU memory: ≥ 40 bytes per voxel (40 GB / gigavoxel) of your 3D volume
@@ -45,7 +45,7 @@ pip install -e .
 ```python
 import warpfield 
 
-# 1. Load data
+# 1. Load data (note: the two volumes are expected to be of the same array shape and resolution)
 vol_ref = np.load("reference_volume.npy")
 vol_mov = np.load("moving_volume.npy")
 
