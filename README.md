@@ -11,17 +11,25 @@ A GPU-accelerated Python library for non-rigid volumetric image registration / w
 
 Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repository](https://github.com/danionella/warpfield)
 
----
-
 ## Features
 
-- GPU-accelerated kernels (CuPy, CuPy RawKernels & FFT plans) for high performance  
-- Non-rigid registration via block-wise rigid cross-correlation
-- `WarpMap` class to represent, compose, invert, and apply displacement fields  
-- Fast Difference-of-Gaussian (DoG) filtering and a variety of projection methods (max, mean, max_dog, etc.)  
+- GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
+- `WarpMap` class to represent, compose, invert, and apply displacement fields
+- Efficient transform of 3D volumes as well as point coordinates
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
 
+## General Principle
+
+The registration process aligns a moving 3D volume to a fixed reference volume by estimating and applying a displacement field. The process is typically performed in a multi-resolution (pyramid) fashion, starting with coarse alignment and progressively refining the displacement field at finer resolutions.
+
+The key steps are:
+
+1. **Preprocessing**: Enhance features in the volumes (e.g., using Difference-of-Gaussian or DoG filtering) to improve registration accuracy.
+2. **Block Matching**: Divide the volumes into smaller 3D blocks, project them to 2D (along each axis) for memory and compute efficiency, and calculate 2D cross-correlation maps. After smoothing these 2D maps across neighboring blocks, use their maxima to determine the 3D block-level displacement vector.
+3. **Displacement Field Estimation**: Combine block-level displacement vectors into a displacement field (and optionaly apply a median filter or fit an affine transform)
+4. **Warping**: Apply the displacement field to the moving volume to align it with the fixed volume.
+5. **Multi-Resolution Refinement**: Repeat the above steps at progressively finer resolutions to refine the alignment.
 ---
 
 ## Hardware requirements
@@ -198,3 +206,16 @@ recipe = Recipe(
 )
 ```
 
+## Under the Hood
+
+### General Principle
+
+The registration process aligns a "moving" 3D volume to a "fixed" reference volume by estimating and applying a displacement field. The displacement field describes how each voxel in the moving volume should be shifted to match the fixed volume. The process is typically performed in a multi-resolution (pyramid) fashion, starting with coarse alignment and progressively refining the displacement field at finer resolutions.
+
+The key steps are:
+
+1. **Preprocessing**: Enhance features in the volumes (e.g., using Difference-of-Gaussian filtering) to improve registration accuracy.
+2. **Block Matching**: Divide the volumes into blocks, project them into 2D for memory and compute efficiency, and calculate 2D cross-correlation maps. After smoothing these 2D maps across neighboring blocks, use their maxima to determine the 3D block-level displacement vector.
+3. **Displacement Field Estimation**: Combine block-level displacement vectors into a displacement field (and optionaly apply a median filter or fit an affine transform)
+4. **Warping**: Apply the displacement field to the moving volume to align it with the fixed volume.
+5. **Multi-Resolution Refinement**: Repeat the above steps at progressively finer resolutions to refine the alignment.
