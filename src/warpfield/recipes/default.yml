@@ -1,8 +1,9 @@
 # default recipe
-clip_thresh: 10
-dog: true
-low: 0.5
-high: 10.0
+pre_filter:
+  clip_thresh: 0
+  dog: true
+  low: 0.5
+  high: 10.0
 levels:
   - block_size: [-5, -5, -5] #affine filter. keep block size. Maybe adjust project low/high sigmas
     project:
