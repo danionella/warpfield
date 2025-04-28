@@ -17,15 +17,24 @@ def import_data(file_path: str):
                          using the format '/path/to/file.h5:/group/key' or '/path/to/file.mat:variable_name'.
 
     Returns:
-        np.ndarray: Loaded data as a NumPy array.
+        tuple: (data, metadata)
+            - data (np.ndarray): Loaded data as a NumPy array.
+            - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
     """
+
     if file_path.endswith('.npy'):
-        return np.load(file_path)
+        data = np.load(file_path).copy()
+        return data, dict(filetype='npy', path=file_path, meta={})
 
     elif '.h5:' in file_path or '.hdf5:' in file_path:
         file_path, key = file_path.split(':', 1)
         with h5py.File(file_path, 'r') as f:
-            return np.array(f[key])
+            data = np.array(f[key])
+            attrs = dict(f[key].attrs)  # Extract attributes as metadata
+        return data, dict(filetype='hdf5',path=file_path, key=key, meta=attrs)
+        
+    elif file_path.endswith('.h5') or file_path.endswith('.hdf5'):
+        raise ValueError(f"HDF5 file path was provided without dataset key (example: /path/to/file.h5:/dataset)")
 
     elif '.mat:' in file_path:
         from scipy.io import loadmat
@@ -33,8 +42,9 @@ def import_data(file_path: str):
         mat_data = loadmat(file_path)
         if variable_name not in mat_data:
             raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
-        return mat_data[variable_name]
-    
+        data = mat_data[variable_name]
+        return data, dict(filetype='matlab', path=file_path, key=key, meta=mat_data[variable_name].attrs)
+
     elif file_path.endswith('.nii') or file_path.endswith('.nii.gz'):
         try:
             import nibabel as nib
@@ -42,7 +52,12 @@ def import_data(file_path: str):
             raise ImportError("The 'nibabel' package is required to load NIfTI files. Please install it.")
         warnings.warn("The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
         nii = nib.load(file_path)
-        return np.asanyarray(nii.get_fdata())
+        data = np.asanyarray(nii.get_fdata())
+        metadata = {
+            "affine": nii.affine,  # Transformation matrix
+            "header": dict(nii.header),  # Header information
+        }
+        return data, dict(filetype='nifti', path=file_path, meta=metadata)
 
     elif file_path.endswith('.dcm'):
         try:
@@ -51,15 +66,24 @@ def import_data(file_path: str):
             raise ImportError("The 'pydicom' package is required to load DICOM files. Please install it.")
         warnings.warn("The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
         dicom = pydicom.dcmread(file_path)
-        return dicom.pixel_array
+        data = dicom.pixel_array
+        metadata = {
+            "spacing": getattr(dicom, "PixelSpacing", None),
+            "slice_thickness": getattr(dicom, "SliceThickness", None),
+            "orientation": getattr(dicom, "ImageOrientationPatient", None),
+            "position": getattr(dicom, "ImagePositionPatient", None),
+        }
+        return data, dict(filetype='dicom', path=file_path, meta=metadata)
 
     elif file_path.endswith('.tiff') or file_path.endswith('.tif'):
         try:
             import tifffile
         except ImportError:
             raise ImportError("The 'tifffile' package is required to load TIFF files. Please install it.")
-        return tifffile.imread(file_path)
-
+        data = tifffile.imread(file_path)
+        tiff_meta = tifffile.TiffFile(file_path).pages[0].tags._dict  # Extract TIFF metadata
+        return data, dict(filetype='tiff', path=file_path, meta=tiff_meta)
+    
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
 

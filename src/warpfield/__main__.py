@@ -29,9 +29,9 @@ def main():
 
     # load
     logging.info(f"Loading fixed image from {args.fixed}...")
-    fixed_image = import_data(args.fixed)
+    fixed_image, _ = import_data(args.fixed)
     logging.info(f"Loading moving image from {args.moving}...")
-    moving_image = import_data(args.moving)
+    moving_image, _ = import_data(args.moving)
     if fixed_image.ndim != 3 or moving_image.ndim != 3:
         raise ValueError("Both fixed and moving images must be 3D volumes.")
     if fixed_image.shape != moving_image.shape:
