@@ -186,20 +186,20 @@ recipe = Recipe(
     pre_filter= RegFilter(clip_thresh=10),
     levels=[
         LevelConfig(block_size=[-5, -5, -5], 
-                    smooth=Smoother(sigmas=[1, 1, 1]), 
-                    project=Projector(low=2, high=10), 
+                    smooth=Smoother(sigmas=[1.0, 1.0, 1.0]), 
+                    project=Projector(low=2.0, high=10.0), 
                     affinify=True, 
                     median_filter=False,
                     repeat=20
                    ),
         LevelConfig(block_size=[-10, -10, -10], 
-                    smooth=Smoother(sigmas=[2, 2, 2]), 
-                    project=Projector(low=2, high=10), 
+                    smooth=Smoother(sigmas=[2.0, 2.0, 2.0]), 
+                    project=Projector(low=2.0, high=10.0), 
                     repeat=10),        
         LevelConfig(block_size=[32, 32, 32], 
                     block_stride=0.5,
-                    smooth=Smoother(sigmas=[2, 2, 2]), 
-                    project=Projector(low=0.5, high=2), 
+                    smooth=Smoother(sigmas=[2.0, 2.0, 2.0]), 
+                    project=Projector(low=0.5, high=2.0), 
                     repeat=5),
     ]
 )
