@@ -380,8 +380,8 @@ class RegistrationPyramid:
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
         vol_tmp = vol_tmp0.copy()
-        min_block_stride = np.min([mapper.block_stride.get() for mapper in self.mappers], axis=0)
-        if np.any(self.mappers[-1].block_stride.get() > min_block_stride[0]):
+        min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
+        if np.any(self.mappers[-1].block_stride > min_block_stride[0]):
             warnings.warn(
                 "The block stride (in voxels) in the last level should not be larger than the block stride in any previous level (along any axis)."
             )
