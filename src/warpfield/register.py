@@ -485,7 +485,7 @@ class Projector(BaseModel):
     """
 
     max: bool = True
-    normalize: bool = False
+    normalize: Union[bool, float] = False
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
@@ -583,7 +583,7 @@ class RegFilter(BaseModel):
         if reg_mask is not None:
             vol *= cp.array(reg_mask, dtype="float32", copy=False)
         if self.dog:
-            vol = dogfilter_gpu(vol, self.low, self.high)
+            vol = dogfilter_gpu(vol, self.low, self.high, mode="reflect")
         return vol
 
 
