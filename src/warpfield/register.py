@@ -495,7 +495,7 @@ class Smoother(BaseModel):
     """
 
     sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
-    truncate: float = 5.0
+    truncate: float = 4.0
     shear: Union[float, None] = None
     long_range_ratio: Union[float, None] = None
     tukey_env: bool = False
