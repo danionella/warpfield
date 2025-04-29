@@ -125,7 +125,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape (e.g. [32, 16, 32]), whle negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5])|
+| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5])|
 | `block_stride`    | Stride. Either list of int stride sizes or float (fraction of block_size). Default is 1. Set to smaller value – e.g. 0.5 – for higher precision, but larger memory footprint   |
 | `project.max`     | If True, apply a max filter to the volume block. Default is True           |
 | `project.dog`     | If True, apply a DoG filter to the volume block. Default is True           |
@@ -136,7 +136,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
-| `affinify`        | If True, apply affine transformation to the displacement field. Default is False          |
+| `affinify`        | If True, apply affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
 | `repeat`          | Number of iterations for this level. Default is 1         |
 
 
@@ -205,6 +205,25 @@ recipe = Recipe(
     ]
 )
 ```
+
+## Contributing
+We welcome contributions! If you have suggestions, bug reports, or feature requests, please open an issue on GitHub. For code contributions, please fork the repository and submit a pull request.
+
+Changes should include:
+- A clear description of the change and its purpose.
+- Tests to ensure the new functionality works as expected.
+- Documentation updates if necessary.
+- Adherence to the project's coding style and guidelines.
+
+Coding guidelines:
+- Use [black]
+- Use [isort]
+- Use [flake8]
+- Use [mypy]
+- Use [pytest] for testing
+- Use [pydocstyle] for docstring style checks
+- Use [pre-commit] to run checks automatically before committing changes
+- Use [tox] for testing across different Python versions
 
 ## See also
 
