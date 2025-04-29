@@ -130,6 +130,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
 | `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
+| `project.normalize`    | Whether to normalize the projections before calculating the cross-covariance (which would make it a true cross-correlation). Defaults to False or 0.0. Values can range from 0.0 (False) to 1.0 (True L2 norm). Values in between imply normalisation by `l2_norm**normalize`            |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
