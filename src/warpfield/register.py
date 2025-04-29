@@ -15,24 +15,24 @@ from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow
 
 
 class WarpMap:
-    """ Represents a 3D displacement field
+    """Represents a 3D displacement field
 
     Args:
         warp_field (numpy.array): the displacement field data (3-x-y-z)
-        block_size (3-element list or numpy.array): 
-        block_stride (3-element list or numpy.array): 
+        block_size (3-element list or numpy.array):
+        block_stride (3-element list or numpy.array):
     """
 
     def __init__(self, warp_field, block_size, block_stride=None):
-        self.warp_field = cp.array(warp_field, dtype='float32')
-        self.block_size = cp.array(block_size, dtype='float32')
+        self.warp_field = cp.array(warp_field, dtype="float32")
+        self.block_size = cp.array(block_size, dtype="float32")
         if block_stride is None:
             self.block_stride = self.block_size
         else:
-            self.block_stride = cp.array(block_stride, dtype='float32')
+            self.block_stride = cp.array(block_stride, dtype="float32")
 
     def unwarp(self, vol, out=None):
-        """ Apply the warp to a volume
+        """Apply the warp to a volume
 
         Args:
             vol (cupy.array): the volume to be warped
@@ -41,21 +41,16 @@ class WarpMap:
             cupy.array: warped volume
         """
         vol_out = unwarp_volume(
-            vol,
-            self.warp_field,
-            self.block_stride,
-            cp.array(-self.block_size / self.block_stride / 2),
-            out=out,
+            vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
         )
         return vol_out
-    
+
     def apply(self, vol, out=None):
-        """ Alias of unwarp method
-        """
+        """Alias of unwarp method"""
         return self.unwarp(vol, out=out)
 
     def affinify(self):
-        """ Fit affine transformation and return new fitted WarpMap
+        """Fit affine transformation and return new fitted WarpMap
 
         Returns:
             WarpMap:
@@ -73,9 +68,9 @@ class WarpMap:
         a = cp.hstack([ix[ixg], cp.ones((len(ixg), 1))])
         b = ix[ixg] + self.warp_field.reshape(3, -1).T[ixg]
         coeff = cp.linalg.lstsq(a, b, rcond=None)[0]
-        #try this for similarity transform:
-        #import skimage.transform._geometric
-        #coeff = cp.array(skimage.transform._geometric._umeyama(a[:,:3].get(), b.get(), estimate_scale=True))[:3,:].T
+        # try this for similarity transform:
+        # import skimage.transform._geometric
+        # coeff = cp.array(skimage.transform._geometric._umeyama(a[:,:3].get(), b.get(), estimate_scale=True))[:3,:].T
         linfit = ((ix @ (coeff[:3] - cp.eye(3))) + coeff[3]).T.reshape(*self.warp_field.shape)
         return WarpMap(linfit, self.block_size, self.block_stride), coeff
 
@@ -84,7 +79,7 @@ class WarpMap:
         return WarpMap(warp_field, self.block_size, self.block_stride)
 
     def resize_to(self, target):
-        """ Resize to target WarpMap, using linear interpolation
+        """Resize to target WarpMap, using linear interpolation
 
         Returns:
             WarpMap: resized WarpMap
@@ -94,18 +89,25 @@ class WarpMap:
         elif isinstance(target, WarpMapper):
             t_sh, t_bsz, t_bst = target.blocks_shape[:3], cp.array(target.block_size), cp.array(target.block_stride)
         ix = cp.array(cp.indices(t_sh).reshape(3, -1))
-        #ix = (ix + 0.5) / cp.array(self.block_size / t_bsz)[:, None] - 0.5
-        ix = (ix * t_bst[:,None] + (t_bsz  - self.block_size)[:,None]/2) / self.block_stride[:,None]
-        dm_r = cp.array([cupyx.scipy.ndimage.map_coordinates(cp.array(self.warp_field[i]), ix, mode="nearest", order=1).reshape(t_sh) for i in range(3)])
+        # ix = (ix + 0.5) / cp.array(self.block_size / t_bsz)[:, None] - 0.5
+        ix = (ix * t_bst[:, None] + (t_bsz - self.block_size)[:, None] / 2) / self.block_stride[:, None]
+        dm_r = cp.array(
+            [
+                cupyx.scipy.ndimage.map_coordinates(cp.array(self.warp_field[i]), ix, mode="nearest", order=1).reshape(
+                    t_sh
+                )
+                for i in range(3)
+            ]
+        )
         return WarpMap(dm_r, t_bsz, t_bst)
 
     def chain(self, target):
         """
         Chain displacement maps
-        
+
         Args:
             target (WarpMap): WarpMap to be added to existing map
-            
+
         Returns:
             WarpMap:
         """
@@ -113,50 +115,56 @@ class WarpMap:
         warp_field = self.warp_field.copy()
         warp_field += target.warp_field
         # for idim in range(3):
-        #     warp_field[idim] = cupyx.scipy.ndimage.map_coordinates(warp_field[idim], indices + target.warp_field / self.block_size[:, None, None, None], 
+        #     warp_field[idim] = cupyx.scipy.ndimage.map_coordinates(warp_field[idim], indices + target.warp_field / self.block_size[:, None, None, None],
         #                                                            order=1, mode='nearest') + target.warp_field[idim]
         return WarpMap(warp_field, target.block_size, target.block_stride)
-    
-    def invert(self, method='linear'):
-        """ Invert the displacement field
+
+    def invert(self, method="linear"):
+        """Invert the displacement field
 
         Args:
             method (str): interpolation method. 'linear' (default) or 'nearest'
-        
+
         Returns:
             WarpMap:
         """
         warp_field = self.warp_field.get()
         block_size = self.block_size.get()
-        #warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
+        # warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
         block_stride = self.block_stride.get()
-        warp_field_coords = (np.indices(warp_field.shape[1:]) * block_stride[:,None,None,None] + (block_size/2)[:,None,None,None])
+        warp_field_coords = (
+            np.indices(warp_field.shape[1:]) * block_stride[:, None, None, None] + (block_size / 2)[:, None, None, None]
+        )
         out = np.zeros_like(warp_field)
         for i in range(3):
-            out[i] = -scipy.interpolate.griddata((warp_field_coords+warp_field).reshape(3,-1).T, warp_field[i].flatten(), 
-                                                warp_field_coords.reshape(3,-1).T, method=method).reshape(warp_field.shape[1:]) 
+            out[i] = -scipy.interpolate.griddata(
+                (warp_field_coords + warp_field).reshape(3, -1).T,
+                warp_field[i].flatten(),
+                warp_field_coords.reshape(3, -1).T,
+                method=method,
+            ).reshape(warp_field.shape[1:])
         return WarpMap(out, block_size)
-    
-    def invert_fast(self, sigma=.5, truncate=20):
-        """ Invert the displacement field using accumulation and Gaussian basis interpolation.
+
+    def invert_fast(self, sigma=0.5, truncate=20):
+        """Invert the displacement field using accumulation and Gaussian basis interpolation.
 
         Returns:
             WarpMap:
         """
         warp_field = self.warp_field.get()
         inv_field = np.zeros_like(warp_field)
-        #target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_size[:,None,None,None].get()
-        target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_stride[:,None,None,None].get()
+        # target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_size[:,None,None,None].get()
+        target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_stride[:, None, None, None].get()
         num_coords = accumarray(target_coords, target_coords.shape[1:])
         for i in range(3):
             inv_field[i] = accumarray(target_coords, target_coords.shape[1:], weights=warp_field[i].ravel())
-            with np.errstate(invalid='ignore'):
+            with np.errstate(invalid="ignore"):
                 inv_field[i] /= num_coords
             inv_field[i] = infill_nans(inv_field[i], sigma=sigma, truncate=truncate)
         return WarpMap(inv_field, self.block_size, self.block_stride)
 
     def push_coordinates(self, coords, negative_shifts=False):
-        """ Push coordinates through the warp field
+        """Push coordinates through the warp field
 
         Args:
             coords (numpy.array): 3D coordinates to be warped (3-by-n array)
@@ -165,22 +173,24 @@ class WarpMap:
             numpy.array: warped coordinates
         """
         assert coords.shape[0] == 3
-        coords = cp.array(coords, dtype='float32')
-        #coords_blocked = coords / self.block_size[:, None] - 0.5 
-        coords_blocked = coords / self.block_stride[:, None] - (self.block_size / (2*self.block_stride))[:, None]
+        coords = cp.array(coords, dtype="float32")
+        # coords_blocked = coords / self.block_size[:, None] - 0.5
+        coords_blocked = coords / self.block_stride[:, None] - (self.block_size / (2 * self.block_stride))[:, None]
         warp_field = self.warp_field.copy()
         shifts = cp.zeros_like(coords)
         for idim in range(3):
-            shifts[idim] = cupyx.scipy.ndimage.map_coordinates(warp_field[idim], coords_blocked, order=1, mode='nearest')
+            shifts[idim] = cupyx.scipy.ndimage.map_coordinates(
+                warp_field[idim], coords_blocked, order=1, mode="nearest"
+            )
         if negative_shifts:
             shifts = -shifts
         return coords + shifts
-    
+
     def pull_coordinates(self, coords):
         return self.invert_fast().push_coordinates(coords, negative_shifts=True)
-        
+
     def as_ants_image(self, voxel_size_um=1):
-        """ Convert to ANTsImage
+        """Convert to ANTsImage
 
         Args:
             voxel_size_um (scalar or array): voxel size (default is 1)
@@ -192,22 +202,24 @@ class WarpMap:
             import ants
         except ImportError:
             raise ImportError("ANTs is not installed. Please install it using 'pip install ants'")
-        
-        ants_image = ants.from_numpy(self.warp_field.get().transpose(1,2,3,0), 
-                                     origin=list((self.block_size.get()-1) / 2 * voxel_size_um), 
-                                     spacing=list(self.block_stride.get() * voxel_size_um), 
-                                     has_components=True)
+
+        ants_image = ants.from_numpy(
+            self.warp_field.get().transpose(1, 2, 3, 0),
+            origin=list((self.block_size.get() - 1) / 2 * voxel_size_um),
+            spacing=list(self.block_stride.get() * voxel_size_um),
+            has_components=True,
+        )
         return ants_image
 
 
 class WarpMapper:
-    """ Class that estimates warp field using cross-correlation, based on a piece-wise rigid model.
+    """Class that estimates warp field using cross-correlation, based on a piece-wise rigid model.
 
-        Args:
-            ref_vol (numpy.array): The reference volume
-            block_size (3-element list or numpy.array): shape of blocks, whose rigid displacement is estimated
-            block_stride (3-element list or numpy.array): stride (usually identical to block_size)
-            proj_method (str or callable): Projection method
+    Args:
+        ref_vol (numpy.array): The reference volume
+        block_size (3-element list or numpy.array): shape of blocks, whose rigid displacement is estimated
+        block_stride (3-element list or numpy.array): stride (usually identical to block_size)
+        proj_method (str or callable): Projection method
     """
 
     def __init__(self, ref_vol, block_size, block_stride=None, proj_method=None, subpixel=4, epsilon=1e-6):
@@ -225,22 +237,28 @@ class WarpMapper:
         self.blocks_shape = ref_blocks.shape
         ref_blocks_proj = [self.proj_method(ref_blocks, axis=iax) for iax in [-3, -2, -1]]
         ref_blocks_proj = [
-            ref_blocks_proj[i] *
-            cp.array(ndwindow([1, 1, 1, *ref_blocks_proj[i].shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=0.5))).astype("float32")
+            ref_blocks_proj[i]
+            * cp.array(
+                ndwindow([1, 1, 1, *ref_blocks_proj[i].shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=0.5))
+            ).astype("float32")
             for i in range(3)
         ]
-        self.plan_fwd = [cupyx.scipy.fft.get_fft_plan(ref_blocks_proj[i], axes=(-2, -1), value_type='R2C') for i in range(3)]
-        self.ref_blocks_proj_ft_conj = [cupyx.scipy.fft.rfftn(ref_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i]).conj() for i in range(3)]
+        self.plan_fwd = [
+            cupyx.scipy.fft.get_fft_plan(ref_blocks_proj[i], axes=(-2, -1), value_type="R2C") for i in range(3)
+        ]
+        self.ref_blocks_proj_ft_conj = [
+            cupyx.scipy.fft.rfftn(ref_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i]).conj() for i in range(3)
+        ]
         self.block_size = block_size
         self.block_stride = block_stride
 
     def get_displacement(self, vol, smooth_func=None):
-        """ Estimate the displacement of vol with the reference volume, via piece-wise rigid cross-correlation with the pre-saved blocks.
+        """Estimate the displacement of vol with the reference volume, via piece-wise rigid cross-correlation with the pre-saved blocks.
 
         Args:
             vol (numpy.array): Input volume
             smooth_func (callable): Smoothing function to be applied to the cross-correlation volume
-        
+
         Returns:
             WarpMap
         """
@@ -250,56 +268,66 @@ class WarpMapper:
 
         disp_field = []
         for i in range(3):
-            R = cupyx.scipy.fft.rfftn(vol_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i]) * self.ref_blocks_proj_ft_conj[i]
+            R = (
+                cupyx.scipy.fft.rfftn(vol_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i])
+                * self.ref_blocks_proj_ft_conj[i]
+            )
             if self.plan_rev[i] is None:
-                self.plan_rev[i] = cupyx.scipy.fft.get_fft_plan(R, axes=(-2, -1), value_type='C2R')
+                self.plan_rev[i] = cupyx.scipy.fft.get_fft_plan(R, axes=(-2, -1), value_type="C2R")
             xcorr_proj = cp.fft.fftshift(cupyx.scipy.fft.irfftn(R, axes=(-2, -1), plan=self.plan_rev[i]), axes=(-2, -1))
             if smooth_func is not None:
                 xcorr_proj = smooth_func(xcorr_proj, self.block_size)
-            xcorr_proj[..., xcorr_proj.shape[-2]//2, xcorr_proj.shape[-1]//2] += self.epsilon
+            xcorr_proj[..., xcorr_proj.shape[-2] // 2, xcorr_proj.shape[-1] // 2] += self.epsilon
 
             max_ix = cp.array(cp.unravel_index(cp.argmax(xcorr_proj, axis=(-2, -1)), xcorr_proj.shape[-2:]))
             max_ix = max_ix - cp.array(xcorr_proj.shape[-2:])[:, None, None, None] // 2
             del xcorr_proj
-            i0, j0 = max_ix.reshape(2,-1)
+            i0, j0 = max_ix.reshape(2, -1)
             shifts = upsampled_dft_rfftn(
                 R.reshape(-1, *R.shape[-2:]),
-                upsampled_region_size=int(self.subpixel*2+1),
+                upsampled_region_size=int(self.subpixel * 2 + 1),
                 upsample_factor=self.subpixel,
-                axis_offsets=(i0, j0)
+                axis_offsets=(i0, j0),
             )
             del R
             max_sub = cp.array(cp.unravel_index(cp.argmax(shifts, axis=(-2, -1)), shifts.shape[-2:]))
-            max_sub = (max_sub.reshape(max_ix.shape) - cp.array(shifts.shape[-2:])[:, None,None,None] // 2) / self.subpixel
+            max_sub = (
+                max_sub.reshape(max_ix.shape) - cp.array(shifts.shape[-2:])[:, None, None, None] // 2
+            ) / self.subpixel
             del shifts
             disp_field.append(max_ix + max_sub)
-            
+
         disp_field = cp.array(disp_field)
-        disp_field = (cp.array([
-            disp_field[1, 0] + disp_field[2, 0],
-            disp_field[0, 0] + disp_field[2, 1],
-            disp_field[0, 1] + disp_field[1, 1],
-        ]).astype("float32") / 2)
+        disp_field = (
+            cp.array(
+                [
+                    disp_field[1, 0] + disp_field[2, 0],
+                    disp_field[0, 0] + disp_field[2, 1],
+                    disp_field[0, 1] + disp_field[1, 1],
+                ]
+            ).astype("float32")
+            / 2
+        )
         return WarpMap(disp_field, block_size=self.block_size, block_stride=self.block_stride)
 
 
 class RegistrationPyramid:
-    """ A class for performing multi-resolution registration.
+    """A class for performing multi-resolution registration.
 
     Args:
         ref_vol (numpy.array): Reference volume
-        settings (pandas.DataFrame): Settings for each level of the pyramid. 
+        settings (pandas.DataFrame): Settings for each level of the pyramid.
             IMPORTANT: the block sizea in the last level cannot be larger than the block_size in any previous level.
         reg_mask (numpy.array): Mask for registration
         clip_thresh (float): Threshold for clipping the reference volume
     """
 
     def __init__(self, ref_vol, recipe, reg_mask=1):
-        
+
         self.recipe = recipe
-        self.reg_mask = cp.array(reg_mask, dtype='float32', copy=False)
+        self.reg_mask = cp.array(reg_mask, dtype="float32", copy=False)
         self.mappers = []
-        ref_vol = cp.array(ref_vol, dtype='float32', copy=False)
+        ref_vol = cp.array(ref_vol, dtype="float32", copy=False)
         if self.recipe.pre_filter is not None:
             ref_vol = self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask)
         self.mapper_ix = []
@@ -310,57 +338,62 @@ class RegistrationPyramid:
             tmp = np.r_[ref_vol.shape] // -block_size
             block_size[block_size < 0] = tmp[block_size < 0]
             if isinstance(recipe.levels[i].block_stride, (int, float)):
-                block_stride = np.round(block_size * recipe.levels[i].block_stride).astype('int')
+                block_stride = np.round(block_size * recipe.levels[i].block_stride).astype("int")
             else:
                 block_stride = np.array(recipe.levels[i].block_stride)
-            self.mappers.append(WarpMapper(ref_vol, block_size, block_stride=block_stride, proj_method=recipe.levels[i].project))
+            self.mappers.append(
+                WarpMapper(ref_vol, block_size, block_stride=block_stride, proj_method=recipe.levels[i].project)
+            )
             self.mapper_ix.append(i)
         assert len(self.mappers) > 0, "At least one level of registration is required"
 
     def register_single(self, vol, callback=None, verbose=False):
-        """ Register a single volume to the reference volume.
-        
+        """Register a single volume to the reference volume.
+
         Args:
             vol (array_like): Volume to be registered (numpy or cupy array)
             callback (function): Callback function to be called after each level of registration
-            
+
         Returns:
             vol (array_like): Registered volume (numpy or cupy array, depending on input)
             warp_map (WarpMap): Displacement field
             callback_output (list): List of outputs from the callback function
         """
         was_numpy = isinstance(vol, np.ndarray)
-        vol = cp.array(vol, 'float32', copy=False)
+        vol = cp.array(vol, "float32", copy=False)
         warp_map = None
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
         vol_tmp = vol_tmp0.copy()
         for k, mapper in enumerate(tqdm(self.mappers, desc=f"Levels", disable=not verbose)):
-            for _ in tqdm(range(self.recipe.levels[self.mapper_ix[k]].repeat), leave=False, desc=f"Repeats", disable=not verbose):
-                dm = mapper.get_displacement(vol_tmp, #* self.reg_mask,
-                                                smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth)
+            for _ in tqdm(
+                range(self.recipe.levels[self.mapper_ix[k]].repeat), leave=False, desc=f"Repeats", disable=not verbose
+            ):
+                dm = mapper.get_displacement(
+                    vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
+                )
                 if self.recipe.levels[self.mapper_ix[k]].affinify:
                     dm = dm.affinify()[0]
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     dm = dm.median_filter()
-                #this is why the block size in the last level cannot be larger than the block_size in any previous level:
+                # this is why the block size in the last level cannot be larger than the block_size in any previous level:
                 dm = dm.resize_to(self.mappers[-1])
                 if warp_map is None:
                     warp_map = WarpMap(dm.warp_field.copy(), dm.block_size.copy(), dm.block_stride.copy())
                 else:
                     warp_map = warp_map.chain(dm)
-                warp_map.unwarp(vol_tmp0, out = vol_tmp)
+                warp_map.unwarp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
-                    #callback_output.append(callback(warp_map.unwarp(vol)))
+                    # callback_output.append(callback(warp_map.unwarp(vol)))
                     callback_output.append(callback(vol_tmp))
         vol = warp_map.unwarp(vol)
         if was_numpy:
             vol = vol.get()
         return vol, warp_map, callback_output
-    
+
 
 def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
-    """ Register a volume to a reference volume using a registration pyramid.
+    """Register a volume to a reference volume using a registration pyramid.
 
     Args:
         ref (numpy.array or cupy.array): Reference volume
@@ -377,7 +410,8 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
     """
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
-    del reg; gc.collect()
+    del reg
+    gc.collect()
     cp.fft.config.get_plan_cache().clear()
     cp.get_default_memory_pool().free_all_blocks()
     return registered_vol, warp_map, cbout
@@ -385,7 +419,7 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
 
 class Projector(BaseModel):
     """A class to apply a 2D projection and filters to a volume block
-    
+
     Parameters:
         max: if True, apply a max filter to the volume block. Default is True
         normalize: if True, normalize projections by the L2 norm (to get correlations, not covariances). Default is False
@@ -395,6 +429,7 @@ class Projector(BaseModel):
         tukey_env: if True, apply a Tukey window to the output. Default is False
         gauss_env: if True, apply a Gaussian window to the output. Default is False
     """
+
     max: bool = True
     normalize: bool = False
     dog: bool = True
@@ -406,36 +441,48 @@ class Projector(BaseModel):
     def __call__(self, vol_blocks, axis):
         if self.max:
             out = vol_blocks.max(axis)
-        else:       
+        else:
             out = vol_blocks.mean(axis)
         if self.normalize > 0:
-           out /= (cp.sqrt(cp.sum(out**2, axis=(-2,-1), keepdims=True))**self.normalize + 1e-9)
+            out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         if self.tukey_env:
-            out *= cp.array(scipy.signal.windows.tukey(out.shape[-1], alpha=0.5)[None, None, None, None, :], dtype=out.dtype)
-            out *= cp.array(scipy.signal.windows.tukey(out.shape[-2], alpha=0.5)[None, None, None, :, None], dtype=out.dtype)
+            out *= cp.array(
+                scipy.signal.windows.tukey(out.shape[-1], alpha=0.5)[None, None, None, None, :], dtype=out.dtype
+            )
+            out *= cp.array(
+                scipy.signal.windows.tukey(out.shape[-2], alpha=0.5)[None, None, None, :, None], dtype=out.dtype
+            )
         if self.gauss_env:
-            out *= cp.array(scipy.signal.windows.gaussian(out.shape[-1], std=out.shape[-1])[None, None, None, None, :], dtype=out.dtype)
-            out *= cp.array(scipy.signal.windows.gaussian(out.shape[-2], std=out.shape[-2])[None, None, None, :, None], dtype=out.dtype)
+            out *= cp.array(
+                scipy.signal.windows.gaussian(out.shape[-1], std=out.shape[-1])[None, None, None, None, :],
+                dtype=out.dtype,
+            )
+            out *= cp.array(
+                scipy.signal.windows.gaussian(out.shape[-2], std=out.shape[-2])[None, None, None, :, None],
+                dtype=out.dtype,
+            )
         if self.dog:
             sigmas = np.r_[0, 0, 0, 1, 1]
-            out = dogfilter_gpu(out, sigmas * self.low, sigmas * self.high, mode='reflect')
+            out = dogfilter_gpu(out, sigmas * self.low, sigmas * self.high, mode="reflect")
         return out
-    
+
 
 class Smoother(BaseModel):
-    """ Smooth blocks with a Gaussian kernel
+    """Smooth blocks with a Gaussian kernel
     Args:
         sigmas (list): [sigma0, sigma1, sigma2]. If None, no smoothing is applied.
         truncate (float): truncate parameter for gaussian kernel. Default is 5.
         shear (float): shear parameter for gaussian kernel. Default is None.
         long_range_ratio (float): long range ratio for double gaussian kernel. Default is None.
     """
-    sigmas: Union[float, List[float]] = [1.0,1.0,1.0]
+
+    sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
     truncate: float = 5.0
     shear: Union[float, None] = None
     long_range_ratio: Union[float, None] = None
     tukey_env: bool = False
     gauss_env: bool = False
+
     def __call__(self, xcorr_proj, block_size=None):
         if self.sigmas is None:
             return xcorr_proj
@@ -444,40 +491,50 @@ class Smoother(BaseModel):
             gw = gausskernel_sheared(self.sigma[:2], shear_blocks, truncate=self.truncate)
             gw = cp.array(gw[:, :, None, None, None])
             xcorr_proj = cupyx.scipy.ndimage.convolve(xcorr_proj, gw, mode="constant")
-            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter1d(xcorr_proj, self.sigmas[2], axis=2, mode="constant", truncate=4)
-        else: #shear is None:
-            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter(xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=self.truncate)
+            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter1d(
+                xcorr_proj, self.sigmas[2], axis=2, mode="constant", truncate=4
+            )
+        else:  # shear is None:
+            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter(
+                xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=self.truncate
+            )
         if self.long_range_ratio is not None:
-            xcorr_proj *= (1-self.long_range_ratio)
-            xcorr_proj += cupyx.scipy.ndimage.gaussian_filter(xcorr_proj, [*np.array(self.sigmas)*5, 0, 0], mode="constant", truncate=self.truncate) * self.long_range_ratio
+            xcorr_proj *= 1 - self.long_range_ratio
+            xcorr_proj += (
+                cupyx.scipy.ndimage.gaussian_filter(
+                    xcorr_proj, [*np.array(self.sigmas) * 5, 0, 0], mode="constant", truncate=self.truncate
+                )
+                * self.long_range_ratio
+            )
         return xcorr_proj
 
 
 class RegFilter(BaseModel):
-    """ A class to apply a filter to the volume before registration
-    
+    """A class to apply a filter to the volume before registration
+
     Parameters:
         clip_thresh: threshold for clipping the reference volume. Default is 0
         dog: if True, apply a DoG filter to the volume. Default is True
         low: the lower sigma value for the DoG filter. Default is 0.5
         high: the higher sigma value for the DoG filter. Default is 10.0
     """
+
     clip_thresh: float = 0
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
 
     def __call__(self, vol, reg_mask=None):
-        vol = cp.clip(cp.array(vol, 'float32', copy=False) - self.clip_thresh, 0, None)
+        vol = cp.clip(cp.array(vol, "float32", copy=False) - self.clip_thresh, 0, None)
         if reg_mask is not None:
-            vol *= cp.array(reg_mask, dtype='float32', copy=False)
+            vol *= cp.array(reg_mask, dtype="float32", copy=False)
         if self.dog:
             vol = dogfilter_gpu(vol, self.low, self.high)
         return vol
 
 
 class LevelConfig(BaseModel):
-    """ Configuration for each level of the registration pyramid
+    """Configuration for each level of the registration pyramid
 
     Args:
         block_size (list): shape of blocks, whose rigid displacement is estimated
@@ -488,21 +545,23 @@ class LevelConfig(BaseModel):
         affinify (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
     """
+
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
-    project:Projector = Projector()
-    smooth:Union[Smoother, None] = Smoother()
-    affinify:bool = False
-    median_filter:bool = True
-    repeat:int = 1
+    project: Projector = Projector()
+    smooth: Union[Smoother, None] = Smoother()
+    affinify: bool = False
+    median_filter: bool = True
+    repeat: int = 1
 
 
 class Recipe(BaseModel):
-    """ Configuration for the registration recipe
+    """Configuration for the registration recipe
 
     Args:
         reg_filter (RegFilter): Filter to be applied to the volume before registration
         levels (list): List of LevelConfig objects
     """
+
     pre_filter: Union[RegFilter, None] = RegFilter()
     levels: List[LevelConfig]

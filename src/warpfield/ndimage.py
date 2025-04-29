@@ -3,68 +3,68 @@ import cupy as cp
 import cupyx
 
 
-def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode='reflect'):
-    """ Diffference of Gaussians filter
+def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode="reflect"):
+    """Diffference of Gaussians filter
 
     Args:
         vol (array_like): data to be filtered
         sigma_low (scalar or sequence of scalar): standard deviations
         sigma_high (scalar or sequence of scalar): standard deviations
         mode (str): The array borders are handled according to the given mode
-   
+
     Returns:
         (array_like): filtered data
-    
+
     See also:
         cupyx.scipy.ndimage.gaussian_filter
         skimage.filters.difference_of_gaussians
     """
     in_module = vol.__class__.__module__
-    vol = cp.array(vol, 'float32', copy=False)
+    vol = cp.array(vol, "float32", copy=False)
     out = cupyx.scipy.ndimage.gaussian_filter(vol, sigma_low, mode=mode)
     out -= cupyx.scipy.ndimage.gaussian_filter(vol, sigma_high, mode=mode)
-    if in_module == 'numpy':
+    if in_module == "numpy":
         out = out.get()
     return out
 
 
 def gausswin(shape, sigma):
-    """ Create Gaussian window of a given shape and sigma
+    """Create Gaussian window of a given shape and sigma
 
-    Args: 
+    Args:
         shape (list or tuple): shape along each dimension
         sigma (list or tuple): sigma along each dimension
 
     Returns:
         (array_like): Gauss window
     """
-    grid = np.indices(shape).astype('float32')
+    grid = np.indices(shape).astype("float32")
     for dim in range(len(grid)):
         grid[dim] -= shape[dim] // 2
         grid[dim] /= sigma[dim]
     out = np.exp(-(grid**2).sum(0) / 2)
     out /= out.sum()
-    #out = np.fft.fftshift(out)
+    # out = np.fft.fftshift(out)
     return out
 
 
 def gausskernel_sheared(sigma, shear=0, truncate=3):
-    """ Create Gaussian window of a given shape and sigma. The window is sheared along the first two axes. 
+    """Create Gaussian window of a given shape and sigma. The window is sheared along the first two axes.
 
     Args:
-        sigma (float or tuple of float): Standard deviation for Gaussian kernel. 
+        sigma (float or tuple of float): Standard deviation for Gaussian kernel.
         shear (float): Shear factor in d_axis0 / d_axis1
         truncate (float): Truncate the filter at this many standard deviations.
 
     Returns:
         window (array_like): n-dimensional window
     """
-    #TODO: consider moving to .unshear
+    # TODO: consider moving to .unshear
 
-    shape = (np.r_[sigma] * truncate * 2).astype('int')
+    shape = (np.r_[sigma] * truncate * 2).astype("int")
     shape[0] = np.maximum(shape[0], int(np.ceil(shape[1] * np.abs(shear))))
     shape = (shape // 2) * 2 + 1
-    grid = np.indices(shape).astype('float32')
+    grid = np.indices(shape).astype("float32")
     for dim in range(len(grid)):
         grid[dim] -= shape[dim] // 2
         grid[dim] /= sigma[dim]
@@ -75,12 +75,12 @@ def gausskernel_sheared(sigma, shear=0, truncate=3):
 
 
 def ndwindow(shape, window_func):
-    """ Create a n-dimensional window function
-    
+    """Create a n-dimensional window function
+
     Args:
         shape (tuple): shape of the window
         window_func (function): window function to be applied to each dimension
-        
+
     Returns:
         window (array_like): n-dimensional window
     """
@@ -94,26 +94,26 @@ def ndwindow(shape, window_func):
 
 
 def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
-    """ Richardson-Lucy deconvolution (regular and blind)
-    
-    Args: 
+    """Richardson-Lucy deconvolution (regular and blind)
+
+    Args:
         img (ndarray): input image or volume
         psf (ndarray): known psf or initial estimate (before fftshift)
         num_iter (int): number of iterations
         update_psf (bool): True for blind deconvolution
-        
+
     Returns:
         ndarray: deconvolved image
         ndarray: psf
     """
 
     if psf is None and update_psf:
-        psf = cp.ones(img.shape, dtype='float32') / img.size
-    psf = cp.array(psf, 'float32')
+        psf = cp.ones(img.shape, dtype="float32") / img.size
+    psf = cp.array(psf, "float32")
     psf /= psf.sum()
     psf = cp.fft.ifftshift(psf)
     psf_ft = cp.fft.rfftn(psf)
-    img = cp.array(img, dtype='float32', copy=False)
+    img = cp.array(img, dtype="float32", copy=False)
     img_decon = img.copy()
     img_decon_ft = cp.fft.rfftn(img_decon)
     ratio = cp.ones_like(img_decon)
@@ -132,19 +132,19 @@ def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
     return img_decon, cp.fft.fftshift(psf)
 
 
-def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1/100):
-    """ Richardson-Lucy deconvolution using arbitrary convolution operations
-    
-    Args: 
+def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1 / 100):
+    """Richardson-Lucy deconvolution using arbitrary convolution operations
+
+    Args:
         img (ndarray): input image or volume
         convolve_psf (function): function that convolves an image with a psf
         correlate_psf (function): function that correlates an image with a psf. If None, it is assumed that the psf is symmetric and the correlation is computed using the convolution.
         num_iter (int): number of iterations
-        
+
     Returns:
         ndarray: deconvolved image
     """
-    img = cp.clip(cp.array(img, dtype='float32', copy=False), 0, None) + np.float32(epsilon)
+    img = cp.clip(cp.array(img, dtype="float32", copy=False), 0, None) + np.float32(epsilon)
     if num_iter < 1:
         return img
     if correlate_psf is None:
@@ -158,30 +158,31 @@ def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, e
 
 
 def richardson_lucy_gaussian(img, sigmas, num_iter=5):
-    """ Richardson-Lucy deconvolution using Gaussian convolution operations
-    
-    Args: 
+    """Richardson-Lucy deconvolution using Gaussian convolution operations
+
+    Args:
         img (ndarray): input image or volume
         sigmas (list or ndarray): list of Gaussian sigmas along each dimension
         num_iter (int): number of iterations
-        
+
     Returns:
         ndarray: deconvolved image
     """
     import cupyx
+
     conv_with_gauss = lambda x: cupyx.scipy.ndimage.gaussian_filter(x, sigmas)
     return richardson_lucy_generic(img, conv_with_gauss, conv_with_gauss, num_iter)
 
 
 def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5):
-    """ Richardson-Lucy deconvolution using a sheared Gaussian psf
-    
-    Args: 
+    """Richardson-Lucy deconvolution using a sheared Gaussian psf
+
+    Args:
         img (ndarray): input image or volume
         sigmas (list or ndarray): list of Gaussian sigmas along each dimension
         shear (scalar): shear ratio
         num_iter (int): number of iterations
-        
+
     Returns:
         ndarray: deconvolved image
     """
@@ -189,14 +190,13 @@ def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5):
         return richardson_lucy_gaussian(img, sigmas, num_iter)
 
     import cupyx
+
     sigmas = np.array(sigmas)
-    gw = cp.array(gausskernel_sheared(sigmas, shear=shear, truncate=4), 'float32')
-    gw01 = gw.sum(2)[:,:,None]
+    gw = cp.array(gausskernel_sheared(sigmas, shear=shear, truncate=4), "float32")
+    gw01 = gw.sum(2)[:, :, None]
     gw01 /= gw01.sum()
-    gw2 = gw.sum(axis=(0,1))[None,None,:]
+    gw2 = gw.sum(axis=(0, 1))[None, None, :]
     gw2 /= gw2.sum()
     conv_shear = lambda vol: cupyx.scipy.ndimage.convolve(cupyx.scipy.ndimage.convolve(vol, gw01), gw2)
     dec = richardson_lucy_generic(img, conv_shear, num_iter=num_iter)
     return dec
-
-

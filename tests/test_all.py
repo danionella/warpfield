@@ -18,17 +18,21 @@ from warpfield.recipes import from_yaml
 
 try:
     import cupy as cp
+
     _ = cp.cuda.runtime.getDeviceCount()  # Check if any GPU devices are available
     gpu_available = True
 except (ImportError, cp.cuda.runtime.CUDARuntimeError):
     gpu_available = False
     warnings.warn("No GPU detected. Skipping GPU tests.")
 
+
 def test_trivial():
     assert True == True
 
+
 def test_trivial2():
     assert False == False
+
 
 def test_import_npy(tmp_path):
     """Test importing a 3D .npy file."""
@@ -38,6 +42,7 @@ def test_import_npy(tmp_path):
 
     loaded_data, meta = import_data(str(file_path))
     assert np.allclose(loaded_data, data), "Loaded .npy data does not match expected data."
+
 
 def test_import_h5(tmp_path):
     """Test importing a 3D .h5 file."""
@@ -49,6 +54,7 @@ def test_import_h5(tmp_path):
     loaded_data, meta = import_data(f"{file_path}:dataset")
     assert np.allclose(loaded_data, data), "Loaded .h5 data does not match expected data."
 
+
 def test_import_nii(tmp_path):
     """Test importing a 3D .nii file."""
     file_path = tmp_path / "test.nii"
@@ -58,6 +64,7 @@ def test_import_nii(tmp_path):
 
     loaded_data, meta = import_data(str(file_path))
     assert np.allclose(loaded_data, data), "Loaded .nii data does not match expected data."
+
 
 def test_import_dicom(tmp_path):
     """Test importing a 3D DICOM file."""
@@ -97,6 +104,7 @@ def test_import_dicom(tmp_path):
     assert loaded_data.shape == data.shape, "Loaded .dcm data shape does not match expected data."
     assert np.array_equal(loaded_data, data), "Loaded .dcm data does not match expected data."
 
+
 def test_import_tiff(tmp_path):
     """Test importing a 3D .tiff file."""
     file_path = tmp_path / "test.tiff"
@@ -117,8 +125,11 @@ def test_register_volumes():
     registered, warp_map, _ = register_volumes(fixed, moving, recipe, verbose=False)
 
     assert registered.shape == fixed.shape, "Registered volume shape mismatch."
-    assert (np.abs(registered[10:-10,10:-10,10:-10] - fixed[10:-10,10:-10,10:-10]) < 0.2).mean() >0.9, "Registered volume does not match the fixed volume."
+    assert (
+        np.abs(registered[10:-10, 10:-10, 10:-10] - fixed[10:-10, 10:-10, 10:-10]) < 0.2
+    ).mean() > 0.9, "Registered volume does not match the fixed volume."
     assert warp_map is not None, "WarpMap object was not returned."
+
 
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
 def test_cli(tmp_path):
@@ -141,11 +152,17 @@ def test_cli(tmp_path):
     # Run the CLI command
     result = subprocess.run(
         [
-            "python", "-m", "warpfield",
-            "--fixed", str(fixed_path),
-            "--moving", str(moving_path),
-            "--recipe", recipe_path,
-            "--output", str(output_path)
+            "python",
+            "-m",
+            "warpfield",
+            "--fixed",
+            str(fixed_path),
+            "--moving",
+            str(moving_path),
+            "--recipe",
+            recipe_path,
+            "--output",
+            str(output_path),
         ],
         capture_output=True,
         text=True,
@@ -158,6 +175,7 @@ def test_cli(tmp_path):
     # Verify the output file
     assert os.path.exists(output_path), "Output file was not created."
     import h5py
+
     with h5py.File(output_path, "r") as f:
         assert "moving_reg" in f, "Registered volume not found in output file."
         assert "warp_map" in f, "Warp map not found in output file."

@@ -5,7 +5,8 @@ import yaml
 
 from ..register import Recipe
 
-def from_yaml(yaml_path: str = 'default') -> Recipe:
+
+def from_yaml(yaml_path: str = "default") -> Recipe:
     """
     Get a recipe from YAML by filename.
     """

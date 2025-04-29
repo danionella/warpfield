@@ -10,11 +10,8 @@ from .recipes import from_yaml
 from .register import register_volumes
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
 
 def main():
     parser = argparse.ArgumentParser(description="GPU-accelerated volumetric image registration tool.")
@@ -22,8 +19,15 @@ def main():
     parser.add_argument("--moving", required=True, help="Path to the moving image/volume file.")
     parser.add_argument("--recipe", required=True, help="Path to the recipe YAML file for registration.")
     parser.add_argument("--output", help="Path to save the registered image/volume.")
-    parser.add_argument("--compression", type=str, default="gzip", help="Compression method for saving the registered volume (default: gzip).")
-    parser.add_argument("--invert", action="store_true", help="Invert the warp map and register the moving image to the fixed image.")
+    parser.add_argument(
+        "--compression",
+        type=str,
+        default="gzip",
+        help="Compression method for saving the registered volume (default: gzip).",
+    )
+    parser.add_argument(
+        "--invert", action="store_true", help="Invert the warp map and register the moving image to the fixed image."
+    )
     args = parser.parse_args()
     output_path = args.output or f"{os.path.splitext(args.moving)[0]}_registered.h5"
 
@@ -52,7 +56,9 @@ def main():
 
     # save
     # consider args.invert when logging and reporting fixed_reg_inv:
-    logging.info(f"Saving to {output_path}:/moving_reg, {'...:/fixed_reg_inv, ' if args.invert else ''}and :/warp_map...")
+    logging.info(
+        f"Saving to {output_path}:/moving_reg, {'...:/fixed_reg_inv, ' if args.invert else ''}and :/warp_map..."
+    )
     with h5py.File(output_path, "w") as f:
         f.create_dataset("moving_reg", data=registered_image, compression=args.compression)
         warp_map_group = f.create_group("warp_map")
@@ -63,6 +69,7 @@ def main():
             f.create_dataset("fixed_reg_inv", data=fixed_reg_inv, compression=args.compression)
 
     logging.info("Done!")
-    
+
+
 if __name__ == "__main__":
     main()

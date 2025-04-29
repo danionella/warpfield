@@ -22,50 +22,52 @@ def import_data(file_path: str):
             - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
     """
 
-    if file_path.endswith('.npy'):
+    if file_path.endswith(".npy"):
         data = np.load(file_path).copy()
-        return data, dict(filetype='npy', path=file_path, meta={})
+        return data, dict(filetype="npy", path=file_path, meta={})
 
-    elif '.h5:' in file_path or '.hdf5:' in file_path:
-        split_index = file_path.rfind(':')  # Find the last colon
-        file_path, key = file_path[:split_index], file_path[split_index + 1:]
-        with h5py.File(file_path, 'r') as f:
+    elif ".h5:" in file_path or ".hdf5:" in file_path:
+        split_index = file_path.rfind(":")  # Find the last colon
+        file_path, key = file_path[:split_index], file_path[split_index + 1 :]
+        with h5py.File(file_path, "r") as f:
             data = np.array(f[key])
             attrs = dict(f[key].attrs)  # Extract attributes as metadata
-        return data, dict(filetype='hdf5',path=file_path, key=key, meta=attrs)
-        
-    elif file_path.endswith('.h5') or file_path.endswith('.hdf5'):
+        return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
+
+    elif file_path.endswith(".h5") or file_path.endswith(".hdf5"):
         raise ValueError(f"HDF5 file path was provided without dataset key (example: /path/to/file.h5:/dataset)")
 
-    elif '.mat:' in file_path:
+    elif ".mat:" in file_path:
         from scipy.io import loadmat
-        file_path, variable_name = file_path.split(':', 1)
+
+        file_path, variable_name = file_path.split(":", 1)
         mat_data = loadmat(file_path)
         if variable_name not in mat_data:
             raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
         data = mat_data[variable_name]
-        return data, dict(filetype='matlab', path=file_path, key=key, meta=mat_data[variable_name].attrs)
+        return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
 
-    elif file_path.endswith('.nii') or file_path.endswith('.nii.gz'):
+    elif file_path.endswith(".nii") or file_path.endswith(".nii.gz"):
         try:
             import nibabel as nib
         except ImportError:
             raise ImportError("The 'nibabel' package is required to load NIfTI files. Please install it.")
-        warnings.warn("The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
+        warnings.warn(
+            "The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
+        )
         nii = nib.load(file_path)
         data = np.asanyarray(nii.get_fdata())
-        metadata = {
-            "affine": nii.affine,  # Transformation matrix
-            "header": dict(nii.header),  # Header information
-        }
-        return data, dict(filetype='nifti', path=file_path, meta=metadata)
+        metadata = {"affine": nii.affine, "header": dict(nii.header)}  # Transformation matrix  # Header information
+        return data, dict(filetype="nifti", path=file_path, meta=metadata)
 
-    elif file_path.endswith('.dcm'):
+    elif file_path.endswith(".dcm"):
         try:
             import pydicom
         except ImportError:
             raise ImportError("The 'pydicom' package is required to load DICOM files. Please install it.")
-        warnings.warn("The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation.")
+        warnings.warn(
+            "The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
+        )
         dicom = pydicom.dcmread(file_path)
         data = dicom.pixel_array
         metadata = {
@@ -74,23 +76,23 @@ def import_data(file_path: str):
             "orientation": getattr(dicom, "ImageOrientationPatient", None),
             "position": getattr(dicom, "ImagePositionPatient", None),
         }
-        return data, dict(filetype='dicom', path=file_path, meta=metadata)
+        return data, dict(filetype="dicom", path=file_path, meta=metadata)
 
-    elif file_path.endswith('.tiff') or file_path.endswith('.tif'):
+    elif file_path.endswith(".tiff") or file_path.endswith(".tif"):
         try:
             import tifffile
         except ImportError:
             raise ImportError("The 'tifffile' package is required to load TIFF files. Please install it.")
         data = tifffile.imread(file_path)
         tiff_meta = tifffile.TiffFile(file_path).pages[0].tags._dict  # Extract TIFF metadata
-        return data, dict(filetype='tiff', path=file_path, meta=tiff_meta)
-    
+        return data, dict(filetype="tiff", path=file_path, meta=tiff_meta)
+
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
 
 
 def accumarray(coords, shape, weights=None, clip=False):
-    """ Accumulate values into an array using given coordinates and weights
+    """Accumulate values into an array using given coordinates and weights
 
     Args:
         coords (array_like): 3-by-n array of coordinates
@@ -99,13 +101,13 @@ def accumarray(coords, shape, weights=None, clip=False):
         clip (bool): if True, clip coordinates to the shape of the output array, else ignore out-of-bounds coordinates. Default is False.
     """
     assert coords.shape[0] == 3
-    coords = np.round(coords.reshape(3,-1)).astype('int')
+    coords = np.round(coords.reshape(3, -1)).astype("int")
     if clip:
         for d in len(shape):
-            coords[d] = np.minimum(np.maximum(coords[d], 0), shape[d]-1)
+            coords[d] = np.minimum(np.maximum(coords[d], 0), shape[d] - 1)
     else:
-        valid_ix = np.all((coords >= 0) & (coords < np.array(shape)[:,None]), axis=0)
-        coords = coords[:,valid_ix]
+        valid_ix = np.all((coords >= 0) & (coords < np.array(shape)[:, None]), axis=0)
+        coords = coords[:, valid_ix]
         if weights is not None:
             weights = weights.ravel()[valid_ix]
     coords_as_ix = np.ravel_multi_index((*coords,), shape).ravel()
@@ -115,7 +117,7 @@ def accumarray(coords, shape, weights=None, clip=False):
 
 
 def infill_nans(arr, sigma=0.5, truncate=50):
-    """ Infill NaNs in an array using Gaussian basis interpolation
+    """Infill NaNs in an array using Gaussian basis interpolation
 
     Args:
         arr (array_like): input array
@@ -125,16 +127,16 @@ def infill_nans(arr, sigma=0.5, truncate=50):
     nans = np.isnan(arr)
     arr_zeros = arr.copy()
     arr_zeros[nans] = 0
-    a = scipy.ndimage.gaussian_filter(np.array(arr_zeros, dtype='float64'), sigma=sigma, truncate=truncate)
-    b = scipy.ndimage.gaussian_filter(np.array(~nans, dtype='float64'), sigma=sigma, truncate=truncate)
-    out = (a/b).astype(arr.dtype)
+    a = scipy.ndimage.gaussian_filter(np.array(arr_zeros, dtype="float64"), sigma=sigma, truncate=truncate)
+    b = scipy.ndimage.gaussian_filter(np.array(~nans, dtype="float64"), sigma=sigma, truncate=truncate)
+    out = (a / b).astype(arr.dtype)
     return out
 
 
 def sliding_block(data, block_size=100, block_stride=1):
-    """ Create a sliding window/block view into the array with the given block shape and stride. The block slides across all dimensions of the array and extracts subsets of the array at all positions.
+    """Create a sliding window/block view into the array with the given block shape and stride. The block slides across all dimensions of the array and extracts subsets of the array at all positions.
 
-    Args: 
+    Args:
         data (array_like): Array to create the sliding window view from
         block_size (int or tuple of int): Size of window over each axis that takes part in the sliding block
         block_stride (int or tuple of int): Stride of teh window along each axis
@@ -156,7 +158,9 @@ def sliding_block(data, block_size=100, block_stride=1):
     return out
 
 
-def upsampled_dft_rfftn(data: cp.ndarray, upsampled_region_size, upsample_factor: int = 1, axis_offsets = None) -> cp.ndarray:
+def upsampled_dft_rfftn(
+    data: cp.ndarray, upsampled_region_size, upsample_factor: int = 1, axis_offsets=None
+) -> cp.ndarray:
     """
     Performs an upsampled inverse DFT on a small region around given offsets,
     taking as input the output of cupy.fft.rfftn (real-to-complex FFT).
@@ -209,12 +213,12 @@ def upsampled_dft_rfftn(data: cp.ndarray, upsampled_region_size, upsample_factor
     x_coords = off_x[:, None] + x_idx[None, :] / upsample_factor  # (B, n)
 
     # Build small inverse‐DFT kernels
-    ky = cp.exp(2j * cp.pi * y_coords[:, :, None] * fy[None, :, :]).astype('complex64')
-    kx = cp.exp(2j * cp.pi * x_coords[:, :, None] * fx[None, :, :]).astype('complex64')
+    ky = cp.exp(2j * cp.pi * y_coords[:, :, None] * fy[None, :, :]).astype("complex64")
+    kx = cp.exp(2j * cp.pi * x_coords[:, :, None] * fx[None, :, :]).astype("complex64")
 
     # First apply along y: (B,m,M) × (B,M,N) -> (B,m,N)
-    out1 = cp.einsum('b m M, b M N -> b m N', ky, full)
+    out1 = cp.einsum("b m M, b M N -> b m N", ky, full)
     # Then along x: (B,m,N) × (B,n,N)ᵀ -> (B,m,n)
-    patch = cp.einsum('b m N, b n N -> b m n', out1, kx)
+    patch = cp.einsum("b m N, b n N -> b m n", out1, kx)
 
     return patch.real.reshape(*batch_shape, m, n)
