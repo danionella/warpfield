@@ -417,9 +417,10 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         ref (numpy.array or cupy.array): Reference volume
         vol (numpy.array or cupy.array): Volume to be registered
         recipe (Recipe): Registration recipe
-        reg_mask (numpy.array): Mask for registration
-        callback (function): Callback function to be called after each level of registration
-        verbose (bool): If True, show progress bars
+        reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
+        callback (function): Callback function to be called on the volume after each iteration. Can be used to 
+            monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`. Default is None
+        verbose (bool): If True, show progress bars. Default is True
 
     Returns:
         numpy.array or cupy.array: Registered volume

@@ -117,27 +117,26 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 | Pre-filter parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `clip_thresh`     | Threshold for clipping each volume. Default is 0                  |
+| `clip_thresh`     | Pixel value threshold for clipping each volume. Default is 0                  |
 | `dog`             | If True, apply a 3D DoG pre-filter to each volume. Default is True                 |
-| `low`             | The lower sigma value for the DoG pre-filter. Default is 0.5                   |
-| `high`            | The higher sigma value for the DoG pre-filter. Default is 10.0                 |
+| `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5                   |
+| `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. (Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
 
 
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5])|
-| `block_stride`    | Stride. Either list of int stride sizes or float (fraction of block_size). Default is 1. Set to smaller value – e.g. 0.5 – for higher precision, but larger memory footprint   |
-| `project.max`     | If True, apply a max filter to the volume block. Default is True           |
-| `project.dog`     | If True, apply a DoG filter to the volume block. Default is True           |
-| `project.low`     | The lower sigma value for the 2D DoG filter. Default is 0.5 voxels. (Note: A sigma of 1 correponds to a FWHM of ~ 2.4. The low and high sigmas should be smaller and bigger than the feature of interest. )                    |
-| `project.high`    | The higher sigma value for the 2D DoG filter. Default is 10.0 voxels               |
+| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5] results in 5x5x5 blocks with appropriate shape)|
+| `block_stride`    | Stride. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0. Set this to a smaller value – e.g. 0.5 – for higher precision, but larger memory footprint   |
+| `project.max`     | If True, apply 3D -> 2D max projections to each volume block. If false, apply mean projections. Default is True           |
+| `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
+| `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
+| `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
-| `smooth.truncate` | Truncate parameter for gaussian kernel. Default is 5 blocks.                      |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
 | `affinify`        | If True, apply affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
-| `repeat`          | Number of iterations for this level. Default is 1         |
+| `repeat`          | Number of iterations for this level. More repeats allow each block to deviate further from neighbors, despite smoothing. Typical values range from 1-10. Disable a level by setting repeats to 0.|
 
 
 ### Defining recipes
