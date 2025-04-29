@@ -30,12 +30,11 @@ The key steps are:
 3. **Displacement Field Estimation**: Combine block-level displacement vectors into a displacement field (and optionaly apply a median filter or fit an affine transform)
 4. **Warping**: Apply the displacement field to the moving volume to align it with the fixed volume.
 5. **Multi-Resolution Refinement**: Repeat the above steps at progressively finer resolutions to refine the alignment.
----
 
 ## Hardware requirements
 
 - A computer running Linux (recommended) or Windows
-- A CUDA-compatible GPU with sufficient GPU memory: ≥ 100 bytes per voxel (100 GB / gigavoxel) of your 3D volume
+- A CUDA-compatible GPU with sufficient GPU memory: ≥ 30 bytes per voxel (30 GB / gigavoxel) of your 3D volume
 
 
 ## Installation
@@ -125,8 +124,8 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5] results in 5x5x5 blocks with appropriate shape)|
-| `block_stride`    | Block stride, determines whether blocks overlap. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0 (no overlap). Set this to a smaller value (e.g. 0.5) for overlaping blocks and higher precision, but larger memory footprint   |
+| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5] results in 5 blocks along each axis)|
+| `block_stride`    | Block stride – determines whether blocks overlap. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0 (no overlap). Set this to a smaller value (e.g. 0.5) for overlaping blocks and higher precision, but larger (e.g. 8x) memory footprint   |
 | `project.max`     | If True, apply 3D -> 2D max projections to each volume block. If false, apply mean projections. Default is True           |
 | `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
