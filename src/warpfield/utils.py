@@ -56,7 +56,7 @@ def import_data(file_path: str):
             "The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
         )
         nii = nib.load(file_path)
-        data = np.asanyarray(nii.get_fdata())
+        data = np.asanyarray(nii.get_fdata(), order='C').astype('float32')
         metadata = {"affine": nii.affine, "header": dict(nii.header)}  # Transformation matrix  # Header information
         return data, dict(filetype="nifti", path=file_path, meta=metadata)
 
