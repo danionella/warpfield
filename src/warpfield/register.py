@@ -50,13 +50,25 @@ class WarpMap:
         """Alias of unwarp method"""
         return self.unwarp(vol, out=out)
 
-    def affinify(self):
+    def affinify(self, target=None):
         """Fit affine transformation and return new fitted WarpMap
+
+        Args:
+            target (dict): dict with keys "blocks_shape", "block_size", and "block_stride"
 
         Returns:
             WarpMap:
             numpy.array: affine tranformation coefficients
         """
+        if target is None:
+            warp_field_shape = self.warp_field.shape
+            block_size = self.block_size
+            block_stride = self.block_stride
+        else:
+            warp_field_shape = target["warp_field_shape"]
+            block_size = cp.array(target["block_size"]).astype("float32")
+            block_stride = cp.array(target["block_stride"]).astype("float32")
+
         ix = cp.indices(self.warp_field.shape[1:]).reshape(3, -1).T
         ix = ix * self.block_stride + self.block_size / 2
         # #added:
@@ -72,8 +84,9 @@ class WarpMap:
         # try this for similarity transform:
         # import skimage.transform._geometric
         # coeff = cp.array(skimage.transform._geometric._umeyama(a[:,:3].get(), b.get(), estimate_scale=True))[:3,:].T
-        linfit = ((ix @ (coeff[:3] - cp.eye(3))) + coeff[3]).T.reshape(*self.warp_field.shape)
-        return WarpMap(linfit, self.block_size, self.block_stride), coeff
+        ix_out = cp.indices(warp_field_shape[1:]).reshape(3, -1).T * block_stride + block_size / 2
+        linfit = ((ix_out @ (coeff[:3] - cp.eye(3))) + coeff[3]).T.reshape(warp_field_shape)
+        return WarpMap(linfit, block_size, block_stride), coeff
 
     def median_filter(self):
         warp_field = cupyx.scipy.ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
@@ -392,20 +405,28 @@ class RegistrationPyramid:
                 wm = mapper.get_displacement(
                     vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
                 )
+                if self.recipe.levels[self.mapper_ix[k]].median_filter:
+                    wm = wm.median_filter()
                 if self.recipe.levels[self.mapper_ix[k]].affinify:
                     if np.any(np.array(mapper.blocks_shape[:3]) < 3):
                         raise ValueError(
                             f"affinify is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {vol.shape}; block size: {mapper.block_size}"
                         )
-                    if (np.array(mapper.blocks_shape[:3]) < 4).sum() > 1: # if more than one axis has fewer than 4 blocks, affinify is not supported either
+                    if (np.array(mapper.blocks_shape[:3]) < 4).sum() > 1:
+                        # if more than one axis has fewer than 4 blocks, affinify is not supported either
                         raise ValueError(
                             f"affinify needs at least two axes with at least 4 blocks! Volume shape: {vol.shape}; block size: {mapper.block_size}"
                         )
-                    wm = wm.affinify()[0]
-                if self.recipe.levels[self.mapper_ix[k]].median_filter:
-                    wm = wm.median_filter()
-                # this is why the block_stride in the last level should not be larger than the block_stride in any previous level:
-                wm = wm.resize_to(self.mappers[-1])
+                    wm, _ = wm.affinify(
+                        target=dict(
+                            warp_field_shape=(3, *self.mappers[-1].blocks_shape[:3]),
+                            block_size=self.mappers[-1].block_size,
+                            block_stride=self.mappers[-1].block_stride,
+                        )
+                    )
+                else:
+                    wm = wm.resize_to(self.mappers[-1])
+
                 if warp_map is None:
                     warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
                 else:
@@ -428,7 +449,7 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         vol (numpy.array or cupy.array): Volume to be registered
         recipe (Recipe): Registration recipe
         reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
-        callback (function): Callback function to be called on the volume after each iteration. Can be used to 
+        callback (function): Callback function to be called on the volume after each iteration. Can be used to
             monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`. Default is None
         verbose (bool): If True, show progress bars. Default is True
 
