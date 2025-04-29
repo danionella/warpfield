@@ -374,19 +374,19 @@ class RegistrationPyramid:
             for _ in tqdm(
                 range(self.recipe.levels[self.mapper_ix[k]].repeat), leave=False, desc=f"Repeats", disable=not verbose
             ):
-                dm = mapper.get_displacement(
+                wm = mapper.get_displacement(
                     vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
                 )
                 if self.recipe.levels[self.mapper_ix[k]].affinify:
-                    dm = dm.affinify()[0]
+                    wm = wm.affinify()[0]
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
-                    dm = dm.median_filter()
-                # this is why the block size in the last level cannot be larger than the block_size in any previous level:
-                dm = dm.resize_to(self.mappers[-1])
+                    wm = wm.median_filter()
+                # this is why the block_stride in the last level should not be larger than the block_stride in any previous level:
+                wm = wm.resize_to(self.mappers[-1])
                 if warp_map is None:
-                    warp_map = WarpMap(dm.warp_field.copy(), dm.block_size.copy(), dm.block_stride.copy())
+                    warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
                 else:
-                    warp_map = warp_map.chain(dm)
+                    warp_map = warp_map.chain(wm)
                 warp_map.unwarp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
                     # callback_output.append(callback(warp_map.unwarp(vol)))
