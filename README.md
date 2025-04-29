@@ -14,7 +14,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
-- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours for gigavoxel volumes)
+- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
@@ -35,7 +35,7 @@ The key steps are:
 ## Hardware requirements
 
 - A computer running Linux (recommended) or Windows
-- A CUDA-compatible GPU with sufficient GPU memory: ≥ 40 bytes per voxel (40 GB / gigavoxel) of your 3D volume
+- A CUDA-compatible GPU with sufficient GPU memory: ≥ 100 bytes per voxel (100 GB / gigavoxel) of your 3D volume
 
 
 ## Installation
@@ -155,22 +155,22 @@ You can then modify the recipe parameters as needed (this is a convenient option
 recipe.pre_filter.clip_thresh=10
 
 recipe.levels[0].block_size = [-5,-5,-5]
-recipe.levels[0].smooth.sigmas=[1,1,1]
+recipe.levels[0].smooth.sigmas=[1.0,1.0,1.0]
 recipe.levels[0].affinify = True
 recipe.levels[0].median_filter = False
 recipe.levels[0].repeat = 10
 
 recipe.levels[1].block_size = [-20,-10,-40]
-recipe.levels[1].smooth.sigmas=[2,2,2]
+recipe.levels[1].smooth.sigmas=[2.0,2.0,2.0]
 recipe.levels[1].smooth.long_range_ratio = 0.05
 recipe.levels[1].repeat = 5
 
 recipe.levels[2].block_size = [32, 8, 32]
 recipe.levels[2].block_stride = 0.5
-recipe.levels[2].smooth.sigmas=[4,4,4]
+recipe.levels[2].smooth.sigmas=[4.0,4.0,4.0]
 recipe.levels[2].smooth.long_range_ratio = 0.1
-recipe.levels[2].project.low = 1
-recipe.levels[2].project.high = 2
+recipe.levels[2].project.low = 1.0
+recipe.levels[2].project.high = 2.0
 recipe.levels[2].repeat = 5
 
 print(f'recipe has {len(recipe.levels)} levels')
