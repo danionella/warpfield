@@ -57,16 +57,26 @@ extern "C" __global__ void unwarp_volume_kernel(const float * arr, const int * a
 
 
 def unwarp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8]):
-    """ Unwarp a warped volume. Warp is discribed by the displacement relative to a reference. 
+    """Unwarp a 3D volume using a displacement field (calling a CUDA kernel).
 
-    Args: 
-        vol (array_like): 3D (x-y-z) input array to be unwarped
-        disp_field (array_like): 4D (3-x-y-z) array of displacements along x,y,z
-        disp_scale (list): scaling factors for the displacement field
-        disp_offset (list): offset for the displacement field
+    This function applies a displacement field, typically obtained from a 
+    registration algorithm, to unwarp a 3D volume. The displacement field 
+    is a 4D array of shape (3, x, y, z), where the first dimension corresponds 
+    to the x, y, and z displacements. It defines, for each voxel in the target 
+    volume, the source location in the warped volume.
+
+    Args:
+        vol (array_like): 3D input array (x-y-z) to be unwarped.
+        disp_field (array_like): 4D array (3-x-y-z) of displacements along x, y, z.
+        disp_scale (array_like): Scaling factors for the displacement field.
+        disp_offset (array_like): Offset values for the displacement field.
+        out (array_like, optional): Output array to store the unwarped volume. 
+            If None, a new array is created.
+        tpb (list, optional): Threads per block for CUDA kernel execution. 
+            Defaults to [8, 8, 8].
 
     Returns:
-        (array_like): unwarped 3D volume
+        array_like: Unwarped 3D volume.
     """
     was_numpy = isinstance(vol, np.ndarray)
     vol = cp.array(vol, dtype="float32", copy=False)
