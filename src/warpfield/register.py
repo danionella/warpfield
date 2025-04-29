@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Callable
 import warnings
 import gc
 
@@ -7,12 +7,15 @@ import scipy.signal
 import cupy as cp
 import cupyx
 import cupyx.scipy.ndimage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
 from .warp import unwarp_volume
 from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block
 from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow
+
+
+ArrayType = Union[np.ndarray, cp.ndarray]
 
 
 class WarpMap:
@@ -351,7 +354,7 @@ class RegistrationPyramid:
     """
 
     def __init__(self, ref_vol, recipe, reg_mask=1):
-
+        recipe.model_validate(recipe.model_dump())
         self.recipe = recipe
         self.reg_mask = cp.array(reg_mask, dtype="float32", copy=False, order="C")
         self.mappers = []
@@ -590,15 +593,15 @@ class LevelConfig(BaseModel):
         block_size (list): shape of blocks, whose rigid displacement is estimated
         block_stride (list): stride (usually identical to block_size)
         repeat (int): number of iterations for this level
-        smooth (Smoother): Smoother object
-        project (Projector): Projector object
+        smooth (Smoother or None): Smoother object
+        project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
         affinify (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
     """
 
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
-    project: Projector = Projector()
+    project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
     smooth: Union[Smoother, None] = Smoother()
     affinify: bool = False
     median_filter: bool = True
@@ -609,9 +612,9 @@ class Recipe(BaseModel):
     """Configuration for the registration recipe
 
     Args:
-        reg_filter (RegFilter): Filter to be applied to the volume before registration
+        reg_filter (RegFilter, callable or None): Filter to be applied to the reference volume
         levels (list): List of LevelConfig objects
     """
 
-    pre_filter: Union[RegFilter, None] = RegFilter()
+    pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
     levels: List[LevelConfig]
