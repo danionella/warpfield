@@ -241,6 +241,8 @@ class WarpMapper:
         self.plan_rev = [None, None, None]
         self.subpixel = subpixel
         self.epsilon = epsilon
+        if np.any(block_size > np.array(ref_vol.shape)):
+            raise ValueError(f"Block size ({block_size}) must be smaller than the volume shape ({ref_vol.shape})")
 
     def update_reference(self, ref_vol, block_size, block_stride=None):
         ft = lambda arr: cp.fft.rfftn(arr, axes=(-2, -1))
