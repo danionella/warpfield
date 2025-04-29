@@ -14,7 +14,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
-- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours)
+- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
@@ -126,13 +126,13 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 | `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5] results in 5x5x5 blocks with appropriate shape)|
-| `block_stride`    | Stride. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0. Set this to a smaller value – e.g. 0.5 – for higher precision, but larger memory footprint   |
+| `block_stride`    | Block stride, determines whether blocks overlap. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0 (no overlap). Set this to a smaller value (e.g. 0.5) for overlaping blocks and higher precision, but larger memory footprint   |
 | `project.max`     | If True, apply 3D -> 2D max projections to each volume block. If false, apply mean projections. Default is True           |
 | `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
 | `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
-| `smooth.shear`    | Shear parameter (specific to oblique plane wobble). Default is None.                      |
+| `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
 | `affinify`        | If True, apply affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
