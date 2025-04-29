@@ -5,7 +5,8 @@ pre_filter:
   low: 0.5
   high: 10.0
 levels:
-  - block_size: [-4, -4, -4] # affine level. keep block size. Maybe adjust project low/high sigmas
+  # affine level with largest possible blocks. Maybe adjust projector low/high sigma
+  - block_size: [-4, -4, -4] # need at least 4 blocks along each axis for affine fit
     project:
       low: 2.0
       high: 10.0
@@ -14,6 +15,7 @@ levels:
     median_filter: false
     affinify: true
     repeat: 10
+  # first non-affine level with intermediate block size
   - block_size: [64, 64, 64]
     project:
       low: 2.0
@@ -22,6 +24,7 @@ levels:
       sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
     repeat: 5
+  # second non-affine level with small block size and even smaller stride (50% of block size)
   - block_size: [32, 32, 32]
     block_stride: 0.5
     project:
