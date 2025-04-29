@@ -118,7 +118,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | Pre-filter parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 | `clip_thresh`     | Pixel value threshold for clipping each volume. Default is 0                  |
-| `dog`             | If True, apply a 3D DoG pre-filter to each volume. Default is True                 |
+| `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True                 |
 | `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5                   |
 | `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. (Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
 
