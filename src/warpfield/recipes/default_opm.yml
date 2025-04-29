@@ -5,7 +5,8 @@ pre_filter:
   low: 0.5
   high: 10.0
 levels:
-  - block_size: [-4, -4, -4] # affine level. keep block size. Maybe adjust project low/high sigmas
+  # affine level. keep block size. Maybe adjust project low/high sigmas
+  - block_size: [-4, -4, -4] 
     project:
       low: 2.0
       high: 10.0
@@ -24,8 +25,8 @@ levels:
     repeat: 5
   - block_size: [64, 16, 64]
     project:
-      low: 2.0
-      high: 10.0
+      low: 1.0
+      high: 5.0
     smooth:
       sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
@@ -33,23 +34,26 @@ levels:
   - block_size: [32, 8, 32]
     block_stride: 1.0
     project:
-      low: 1.0
+      low: 0.5
       high: 2.0
+      normalize: 0.5
     smooth:
       sigmas: [4.0, 4.0, 4.0]
       long_range_ratio: 0.1
-    repeat: 0
+    repeat: 5
+  # stride 0.5 level (memory hungry)
   - block_size: [32, 8, 32]
     block_stride: 0.5
     project:
-      low: 1.0
+      low: 0.5
       high: 2.0
-      normalize: .5
+      normalize: 0.5
     smooth:
       sigmas: [4.0, 4.0, 4.0]
       long_range_ratio: 0.2
     repeat: 5
-  - block_size: [32, 8, 32] # wobble / shear level
+  # wobble / shear level:
+  - block_size: [32, 8, 32] 
     block_stride: 0.5
     project:
       low: 1
