@@ -393,6 +393,14 @@ class RegistrationPyramid:
                     vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
                 )
                 if self.recipe.levels[self.mapper_ix[k]].affinify:
+                    if np.any(np.array(mapper.blocks_shape[:3]) < 3):
+                        raise ValueError(
+                            f"affinify is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {vol.shape}; block size: {mapper.block_size}"
+                        )
+                    if (np.array(mapper.blocks_shape[:3]) < 4).sum() > 1: # if more than one axis has fewer than 4 blocks, affinify is not supported either
+                        raise ValueError(
+                            f"affinify needs at least two axes with at least 4 blocks! Volume shape: {vol.shape}; block size: {mapper.block_size}"
+                        )
                     wm = wm.affinify()[0]
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     wm = wm.median_filter()
