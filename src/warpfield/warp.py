@@ -79,7 +79,7 @@ def unwarp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8,
         array_like: Unwarped 3D volume.
     """
     was_numpy = isinstance(vol, np.ndarray)
-    vol = cp.array(vol, dtype="float32", copy=False)
+    vol = cp.array(vol, dtype="float32", copy=False, order="C")
     if out is None:
         out = cp.zeros(vol.shape, dtype=vol.dtype)
     assert out.dtype == cp.dtype("float32")

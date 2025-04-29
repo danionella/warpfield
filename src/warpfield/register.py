@@ -353,9 +353,9 @@ class RegistrationPyramid:
     def __init__(self, ref_vol, recipe, reg_mask=1):
 
         self.recipe = recipe
-        self.reg_mask = cp.array(reg_mask, dtype="float32", copy=False)
+        self.reg_mask = cp.array(reg_mask, dtype="float32", copy=False, order="C")
         self.mappers = []
-        ref_vol = cp.array(ref_vol, dtype="float32", copy=False)
+        ref_vol = cp.array(ref_vol, dtype="float32", copy=False, order="C")
         if self.recipe.pre_filter is not None:
             ref_vol = self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask)
         self.mapper_ix = []
@@ -388,7 +388,7 @@ class RegistrationPyramid:
             callback_output (list): List of outputs from the callback function
         """
         was_numpy = isinstance(vol, np.ndarray)
-        vol = cp.array(vol, "float32", copy=False)
+        vol = cp.array(vol, "float32", copy=False, order="C")
         warp_map = None
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
