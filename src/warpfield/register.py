@@ -81,6 +81,10 @@ class WarpMap:
     def resize_to(self, target):
         """Resize to target WarpMap, using linear interpolation
 
+        Args:
+            target (WarpMap or WarpMapper): target to resize to
+                or a dict with keys "shape", "block_size", and "block_stride"
+
         Returns:
             WarpMap: resized WarpMap
         """
@@ -88,6 +92,14 @@ class WarpMap:
             t_sh, t_bsz, t_bst = target.warp_field.shape[1:], target.block_size, target.block_stride
         elif isinstance(target, WarpMapper):
             t_sh, t_bsz, t_bst = target.blocks_shape[:3], cp.array(target.block_size), cp.array(target.block_stride)
+        elif isinstance(target, dict):
+            t_sh, t_bsz, t_bst = (
+                target["warp_field_shape"][1:],
+                cp.array(target["block_size"]),
+                cp.array(target["block_stride"]),
+            )
+        else:
+            raise ValueError("target must be a WarpMap, WarpMapper, or dict")
         ix = cp.array(cp.indices(t_sh).reshape(3, -1))
         # ix = (ix + 0.5) / cp.array(self.block_size / t_bsz)[:, None] - 0.5
         ix = (ix * t_bst[:, None] + (t_bsz - self.block_size)[:, None] / 2) / self.block_stride[:, None]
