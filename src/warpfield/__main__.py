@@ -61,6 +61,7 @@ def main():
     )
     with h5py.File(output_path, "w") as f:
         f.create_dataset("moving_reg", data=registered_image, compression=args.compression)
+        f.create_dataset("recipe_json", data=recipe.model_dump_json().encode("utf-8"))
         warp_map_group = f.create_group("warp_map")
         warp_map_group.create_dataset("warp_field", data=warp_map.warp_field.get(), compression=args.compression)
         warp_map_group.create_dataset("block_size", data=warp_map.block_size.get())
