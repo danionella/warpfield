@@ -461,6 +461,7 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         WarpMap: Displacement field
         list: List of outputs from the callback function
     """
+    recipe.model_validate(recipe.model_dump())
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
     del reg
