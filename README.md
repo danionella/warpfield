@@ -206,24 +206,6 @@ recipe = Recipe(
 )
 ```
 
-## Contributing
-We welcome contributions! If you have suggestions, bug reports, or feature requests, please open an issue on GitHub. For code contributions, please fork the repository and submit a pull request.
-
-Changes should include:
-- A clear description of the change and its purpose.
-- Tests to ensure the new functionality works as expected.
-- Documentation updates if necessary.
-- Adherence to the project's coding style and guidelines.
-
-Coding guidelines:
-- Use [black]
-- Use [isort]
-- Use [flake8]
-- Use [mypy]
-- Use [pytest] for testing
-- Use [pydocstyle] for docstring style checks
-- Use [pre-commit] to run checks automatically before committing changes
-- Use [tox] for testing across different Python versions
 
 ## See also
 
