@@ -14,7 +14,8 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
-- Efficient forward and inverse transform of 3D volumes as well as point coordinates
+- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours)
+- Forward and inverse transform of 3D volumes as well as point coordinates
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
 
@@ -110,7 +111,7 @@ The output file is an HDF5 file containing the following datasets:
 
 ## Recipes
 
-The registration pipeline is defined by a recipe. The recipe consists of a pre-filter (`RegFilter`) that is applied to all volumes (typically a DoG filter to sharpen features) and list of level descriptors (`LevelConfig`), each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the input volume, with the first level being the coarsest and the last level being the finest.
+The registration pipeline is defined by a recipe. The recipe consists of a pre-filter (`RegFilter`) that is applied to all volumes (typically a DoG filter to sharpen features) and list of level descriptors (`LevelConfig`), each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
 
 ### Recipe parameters
 
