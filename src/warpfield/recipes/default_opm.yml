@@ -5,7 +5,7 @@ pre_filter:
   low: 0.5
   high: 10.0
 levels:
-  - block_size: [-4, -4, -4] # affine level. keep block size. Maybe adjust project low/high sigmas
+  - block_size: [-5, -5, -5] # affine level. keep block size. Maybe adjust project low/high sigmas
     project:
       low: 2.0
       high: 10.0
@@ -13,8 +13,8 @@ levels:
       sigmas: [0.5, 0.5, 0.5]
     median_filter: false
     affinify: true
-    repeat: 20
-  - block_size: [64, 64, 64]
+    repeat: 10
+  - block_size: [64, 16, 64]
     project:
       low: 2.0
       high: 10.0
@@ -22,7 +22,7 @@ levels:
       sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
     repeat: 5
-  - block_size: [32, 32, 32]
+  - block_size: [32, 8, 32]
     block_stride: 0.5
     project:
       low: 1.0
