@@ -116,10 +116,10 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 | Pre-filter parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `clip_thresh`     | Pixel value threshold for clipping each volume. Default is 0                  |
-| `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True                 |
-| `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5                   |
-| `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. (Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
+| `clip_thresh`     | Pixel value threshold for clipping each volume. Default is 0. This setting helps remove DC background, which can otherwise cause edges (the shifted volume is 0 outside the FOV).  |
+| `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True.                 |
+| `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5           |
+| `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
 
 
 | Level parameter      | Description                                                                 |
@@ -130,7 +130,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
 | `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
-| `project.normalize`    | Whether to normalize the projections before calculating the cross-covariance (which would make it a true cross-correlation). Defaults to False or 0.0. Values can range from 0.0 (False) to 1.0 (True L2 norm). Values in between imply normalisation by `l2_norm**normalize`            |
+| `project.normalize`    | Whether to normalize the projections before calculating the cross-covariance (which would make it a cross-correlation). Defaults to False or 0.0. Values can range from 0.0 (False) to 1.0 (True). Values in between imply normalisation by `l2_norm**project.normalize`            |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
