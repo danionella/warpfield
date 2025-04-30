@@ -20,46 +20,58 @@ levels:
       low: 2.0
       high: 10.0
     smooth:
-      sigmas: [1.0, 1.0, 1.0]
+      sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
     repeat: 5
   - block_size: [64, 16, 64]
     project:
-      low: 1.0
+      low: 0.5
       high: 5.0
     smooth:
       sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
     repeat: 5
-  - block_size: [32, 8, 32]
-    block_stride: 1.0
+  # # stride 0.5 level (memory hungry)
+  # - block_size: [32, 8, 32]
+  #   block_stride: 0.5
+  #   project:
+  #     low: 0.5
+  #     high: 2.0
+  #   smooth:
+  #     sigmas: [4.0, 4.0, 4.0]
+  #     long_range_ratio: 0.2
+  #   repeat: 5
+  # intermediate stride
+  - block_size: [24, 8, 24]
+    block_stride: [16, 4, 16]
     project:
       low: 0.5
       high: 2.0
-      normalize: 0.5
-    smooth:
-      sigmas: [4.0, 4.0, 4.0]
-      long_range_ratio: 0.1
-    repeat: 5
-  # stride 0.5 level (memory hungry)
-  - block_size: [32, 8, 32]
-    block_stride: 0.5
-    project:
-      low: 0.5
-      high: 2.0
-      normalize: 0.5
     smooth:
       sigmas: [4.0, 4.0, 4.0]
       long_range_ratio: 0.2
     repeat: 5
-  # wobble / shear level:
-  - block_size: [32, 8, 32] 
-    block_stride: 0.5
-    project:
-      low: 1
-      high: 2.0
-    smooth:
-      sigmas: [0.5, 2.0, 8.0]
-      long_range_ratio: 0.1
-    shear: 0.0
-    repeat: 0 # enable if appropriate
+  # # mixed (nicer on memory but probably worse)
+  # - block_size: [16, 8, 16]
+  #   block_stride: [16, 4, 16]
+  #   project:
+  #     low: 0.5
+  #     high: 2.0
+  #     normalize: 0
+  #     periodic_smooth: true
+  #   tukey_alpha: 1.0
+  #   smooth:
+  #     sigmas: [4.0, 4.0, 4.0]
+  #     long_range_ratio: 0.2
+  #   repeat: 0
+  # # wobble / shear level:
+  # - block_size: [32, 8, 32] 
+  #   block_stride: 0.5
+  #   project:
+  #     low: 1
+  #     high: 2.0
+  #   smooth:
+  #     sigmas: [0.5, 2.0, 8.0]
+  #     long_range_ratio: 0.1
+  #   shear: 0.0
+  #   repeat: 0 # enable if appropriate
