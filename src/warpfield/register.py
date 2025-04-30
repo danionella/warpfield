@@ -518,6 +518,8 @@ class Projector(BaseModel):
         if self.dog:
             sigmas = np.r_[0, 0, 0, 1, 1]
             out = dogfilter_gpu(out, sigmas * self.low, sigmas * self.high, mode="reflect")
+        if self.normalize > 0:
+            out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         return out
 
 
