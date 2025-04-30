@@ -28,6 +28,44 @@ def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode="reflect"):
     return out
 
 
+def periodic_smooth_decomposition_nd_rfft(img):
+    """
+    Decompose ND real images into periodic and smooth components using rfftn/irfftn.
+    Last two axes are treated as the image dimensions.
+    """
+    # compute border-difference
+    B = cp.zeros_like(img)
+    B[..., 0, :] = img[..., -1, :] - img[..., 0, :]
+    B[..., -1, :] = -B[..., 0, :]
+    B[..., :, 0] += img[..., :, -1] - img[..., :, 0]
+    B[..., :, -1] -= img[..., :, -1] - img[..., :, 0]
+
+    # real FFT of border difference
+    B_rfft = cp.fft.rfftn(B, axes=(-2, -1))
+    del B
+
+    # build denom for full grid then slice to half-spectrum
+    M, N = img.shape[-2:]
+    q = cp.arange(M, dtype='float32').reshape(M, 1)
+    r = cp.arange(N, dtype='float32').reshape(1, N)
+    denom_full = 2 * cp.cos(2 * np.pi * q / M) + 2 * cp.cos(2 * np.pi * r / N) - 4
+    # take only first N//2+1 columns
+    denom_half = denom_full[:, : (N // 2 + 1)]
+    denom_half[0, 0] = 1  # avoid divide by zero
+
+    # compute smooth in freq domain (half-spectrum)
+    B_rfft /= denom_half
+    B_rfft[..., 0, 0] = 0
+
+    # invert real FFT back to spatial
+    # smooth = cp.fft.irfftn(B_rfft, s=(M, N), axes=(-2, -1))
+    # periodic = img - smooth
+    tmp = cp.fft.irfftn(B_rfft, s=(M, N), axes=(-2, -1))
+    tmp *= -1
+    tmp += img
+    return tmp
+
+
 def gausswin(shape, sigma):
     """Create Gaussian window of a given shape and sigma
 
