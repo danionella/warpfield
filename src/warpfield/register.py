@@ -250,12 +250,15 @@ class WarpMapper:
         proj_method (str or callable): Projection method
     """
 
-    def __init__(self, ref_vol, block_size, block_stride=None, proj_method=None, subpixel=4, epsilon=1e-6):
+    def __init__(
+        self, ref_vol, block_size, block_stride=None, proj_method=None, subpixel=4, epsilon=1e-6, tukey_alpha=0.5
+    ):
         self.proj_method = proj_method
-        self.update_reference(ref_vol, block_size, block_stride)
         self.plan_rev = [None, None, None]
         self.subpixel = subpixel
         self.epsilon = epsilon
+        self.tukey_alpha = tukey_alpha
+        self.update_reference(ref_vol, block_size, block_stride)
         if np.any(block_size > np.array(ref_vol.shape)):
             raise ValueError(f"Block size ({block_size}) must be smaller than the volume shape ({ref_vol.shape})")
 
@@ -266,13 +269,16 @@ class WarpMapper:
         ref_blocks = sliding_block(cp.array(ref_vol), block_size=block_size, block_stride=block_stride)
         self.blocks_shape = ref_blocks.shape
         ref_blocks_proj = [self.proj_method(ref_blocks, axis=iax) for iax in [-3, -2, -1]]
-        ref_blocks_proj = [
-            ref_blocks_proj[i]
-            * cp.array(
-                ndwindow([1, 1, 1, *ref_blocks_proj[i].shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=0.5))
-            ).astype("float32")
-            for i in range(3)
-        ]
+        if self.tukey_alpha < 1:
+            ref_blocks_proj = [
+                ref_blocks_proj[i]
+                * cp.array(
+                    ndwindow(
+                        [1, 1, 1, *ref_blocks_proj[i].shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=0.5)
+                    )
+                ).astype("float32")
+                for i in range(3)
+            ]
         self.plan_fwd = [
             cupyx.scipy.fft.get_fft_plan(ref_blocks_proj[i], axes=(-2, -1), value_type="R2C") for i in range(3)
         ]
@@ -372,7 +378,13 @@ class RegistrationPyramid:
             else:
                 block_stride = np.array(recipe.levels[i].block_stride)
             self.mappers.append(
-                WarpMapper(ref_vol, block_size, block_stride=block_stride, proj_method=recipe.levels[i].project)
+                WarpMapper(
+                    ref_vol,
+                    block_size,
+                    block_stride=block_stride,
+                    proj_method=recipe.levels[i].project,
+                    tukey_alpha=recipe.levels[i].tukey_alpha,
+                )
             )
             self.mapper_ix.append(i)
         assert len(self.mappers) > 0, "At least one level of registration is required"
@@ -605,6 +617,7 @@ class LevelConfig(BaseModel):
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
     project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
+    tukey_alpha: float = 0.5
     smooth: Union[Smoother, None] = Smoother()
     affinify: bool = False
     median_filter: bool = True
