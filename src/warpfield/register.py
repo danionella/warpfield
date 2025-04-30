@@ -12,8 +12,7 @@ from tqdm.auto import tqdm
 
 from .warp import unwarp_volume
 from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block
-from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow
-
+from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow, periodic_smooth_decomposition_nd_rfft
 
 ArrayType = Union[np.ndarray, cp.ndarray]
 
@@ -491,14 +490,13 @@ class Projector(BaseModel):
     high: float = 10.0
     tukey_env: bool = False
     gauss_env: bool = False
+    periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
         if self.max:
             out = vol_blocks.max(axis)
         else:
             out = vol_blocks.mean(axis)
-        if self.normalize > 0:
-            out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         if self.tukey_env:
             out *= cp.array(
                 scipy.signal.windows.tukey(out.shape[-1], alpha=0.5)[None, None, None, None, :], dtype=out.dtype
@@ -515,6 +513,8 @@ class Projector(BaseModel):
                 scipy.signal.windows.gaussian(out.shape[-2], std=out.shape[-2])[None, None, None, :, None],
                 dtype=out.dtype,
             )
+        if self.periodic_smooth:
+            out = periodic_smooth_decomposition_nd_rfft(out)
         if self.dog:
             sigmas = np.r_[0, 0, 0, 1, 1]
             out = dogfilter_gpu(out, sigmas * self.low, sigmas * self.high, mode="reflect")
