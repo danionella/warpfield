@@ -545,32 +545,30 @@ class Smoother(BaseModel):
     """
 
     sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
-    truncate: float = 4.0
     shear: Union[float, None] = None
     long_range_ratio: Union[float, None] = None
-    tukey_env: bool = False
-    gauss_env: bool = False
 
     def __call__(self, xcorr_proj, block_size=None):
+        truncate = 4.0
         if self.sigmas is None:
             return xcorr_proj
         if self.shear is not None:
             shear_blocks = self.shear * (block_size[1] / block_size[0])
-            gw = gausskernel_sheared(self.sigma[:2], shear_blocks, truncate=self.truncate)
+            gw = gausskernel_sheared(self.sigma[:2], shear_blocks, truncate=truncate)
             gw = cp.array(gw[:, :, None, None, None])
             xcorr_proj = cupyx.scipy.ndimage.convolve(xcorr_proj, gw, mode="constant")
             xcorr_proj = cupyx.scipy.ndimage.gaussian_filter1d(
-                xcorr_proj, self.sigmas[2], axis=2, mode="constant", truncate=4
+                xcorr_proj, self.sigmas[2], axis=2, mode="constant", truncate=truncate
             )
         else:  # shear is None:
             xcorr_proj = cupyx.scipy.ndimage.gaussian_filter(
-                xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=self.truncate
+                xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=truncate
             )
         if self.long_range_ratio is not None:
             xcorr_proj *= 1 - self.long_range_ratio
             xcorr_proj += (
                 cupyx.scipy.ndimage.gaussian_filter(
-                    xcorr_proj, [*np.array(self.sigmas) * 5, 0, 0], mode="constant", truncate=self.truncate
+                    xcorr_proj, [*np.array(self.sigmas) * 5, 0, 0], mode="constant", truncate=truncate
                 )
                 * self.long_range_ratio
             )
