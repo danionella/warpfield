@@ -6,7 +6,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
 <img src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/>
-<sub>(registration of two different subjects)</sub>
+<sup>(registration of two different subjects – video slowed down ~5x)</sup>
 
 # warpfield
 
