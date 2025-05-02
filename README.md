@@ -5,11 +5,15 @@
 [![Conda Version](https://img.shields.io/conda/v/danionella/warpfield)](https://anaconda.org/danionella/warpfield)
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
+<img src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/>
+<sup>(registration of two different subjects – video slowed down ~5x)</sup>
+
 # warpfield
 
 A GPU-accelerated Python library for non-rigid volumetric image registration / warping.
 
 Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repository](https://github.com/danionella/warpfield)
+
 
 ### Features
 
