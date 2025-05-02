@@ -13,7 +13,7 @@ levels:
     smooth:
       sigmas: [0.5, 0.5, 0.5]
     median_filter: false
-    affinify: true
+    affine: true
     repeat: 10
   - block_size: [128, 32, 128]
     project:
@@ -59,7 +59,7 @@ levels:
   #     high: 2.0
   #     normalize: 0
   #     periodic_smooth: true
-  #   tukey_alpha: 1.0
+  #   tukey_ref: 1.0
   #   smooth:
   #     sigmas: [4.0, 4.0, 4.0]
   #     long_range_ratio: 0.2

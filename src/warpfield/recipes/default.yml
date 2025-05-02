@@ -13,7 +13,7 @@ levels:
     smooth:
       sigmas: [0.5, 0.5, 0.5]
     median_filter: false
-    affinify: true
+    affine: true
     repeat: 10
   # first non-affine level with intermediate block size
   - block_size: [64, 64, 64]

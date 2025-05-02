@@ -52,7 +52,7 @@ class WarpMap:
         """Alias of unwarp method"""
         return self.unwarp(vol, out=out)
 
-    def affinify(self, target=None):
+    def fit_affine(self, target=None):
         """Fit affine transformation and return new fitted WarpMap
 
         Args:
@@ -421,17 +421,17 @@ class RegistrationPyramid:
                 )
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     wm = wm.median_filter()
-                if self.recipe.levels[self.mapper_ix[k]].affinify:
+                if self.recipe.levels[self.mapper_ix[k]].affine:
                     if np.any(np.array(mapper.blocks_shape[:3]) < 3):
                         raise ValueError(
-                            f"affinify is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {vol.shape}; block size: {mapper.block_size}"
+                            f"Affine fit is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {vol.shape}; block size: {mapper.block_size}"
                         )
                     if (np.array(mapper.blocks_shape[:3]) < 4).sum() > 1:
-                        # if more than one axis has fewer than 4 blocks, affinify is not supported either
+                        # if more than one axis has fewer than 4 blocks, affine fit is not supported either
                         raise ValueError(
-                            f"affinify needs at least two axes with at least 4 blocks! Volume shape: {vol.shape}; block size: {mapper.block_size}"
+                            f"Affine fit needs at least two axes with at least 4 blocks! Volume shape: {vol.shape}; block size: {mapper.block_size}"
                         )
-                    wm, _ = wm.affinify(
+                    wm, _ = wm.fit_affine(
                         target=dict(
                             warp_field_shape=(3, *self.mappers[-1].blocks_shape[:3]),
                             block_size=self.mappers[-1].block_size,
@@ -608,7 +608,7 @@ class LevelConfig(BaseModel):
         repeat (int): number of iterations for this level
         smooth (Smoother or None): Smoother object
         project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
-        affinify (bool): if True, apply affine transformation to the displacement field
+        affine (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
     """
 
@@ -617,7 +617,7 @@ class LevelConfig(BaseModel):
     project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
     tukey_alpha: float = 0.5
     smooth: Union[Smoother, None] = Smoother()
-    affinify: bool = False
+    affine: bool = False
     median_filter: bool = True
     repeat: int = 1
 
