@@ -385,7 +385,7 @@ class RegistrationPyramid:
                     block_size,
                     block_stride=block_stride,
                     proj_method=recipe.levels[i].project,
-                    tukey_alpha=recipe.levels[i].tukey_alpha,
+                    tukey_alpha=recipe.levels[i].tukey_ref,
                 )
             )
             self.mapper_ix.append(i)
@@ -505,8 +505,6 @@ class Projector(BaseModel):
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
-    tukey_env: bool = False
-    gauss_env: bool = False
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
@@ -514,22 +512,6 @@ class Projector(BaseModel):
             out = vol_blocks.max(axis)
         else:
             out = vol_blocks.mean(axis)
-        if self.tukey_env:
-            out *= cp.array(
-                scipy.signal.windows.tukey(out.shape[-1], alpha=0.5)[None, None, None, None, :], dtype=out.dtype
-            )
-            out *= cp.array(
-                scipy.signal.windows.tukey(out.shape[-2], alpha=0.5)[None, None, None, :, None], dtype=out.dtype
-            )
-        if self.gauss_env:
-            out *= cp.array(
-                scipy.signal.windows.gaussian(out.shape[-1], std=out.shape[-1])[None, None, None, None, :],
-                dtype=out.dtype,
-            )
-            out *= cp.array(
-                scipy.signal.windows.gaussian(out.shape[-2], std=out.shape[-2])[None, None, None, :, None],
-                dtype=out.dtype,
-            )
         if self.periodic_smooth:
             out = periodic_smooth_decomposition_nd_rfft(out)
         if self.dog:
@@ -613,6 +595,7 @@ class LevelConfig(BaseModel):
         repeat (int): number of iterations for this level
         smooth (Smoother or None): Smoother object
         project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
+        tukey_ref (float): if not None, apply a Tukey window to the reference volume (alpha = tukey_ref). Default is 0.5
         affine (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
     """
@@ -620,11 +603,11 @@ class LevelConfig(BaseModel):
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
     project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
-    tukey_alpha: float = 0.5
+    tukey_ref: Union[float, None] = 0.5
     smooth: Union[Smoother, None] = Smoother()
     affine: bool = False
     median_filter: bool = True
-    repeat: int = 1
+    repeat: int = 5
 
 
 class Recipe(BaseModel):
