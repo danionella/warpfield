@@ -131,11 +131,12 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
 | `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
 | `project.normalize`    | Whether to normalize the projections before calculating the cross-covariance (which would make it a cross-correlation). Defaults to False or 0.0. Values can range from 0.0 (False) to 1.0 (True). Values in between imply normalisation by `l2_norm**project.normalize`            |
+| `tukey_ref`    | if not None, apply a Tukey window to the reference projections (alpha = tukey_ref). Default is 0.5. The Tukey window can help reduce edge effects. |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
-| `affinify`        | If True, apply affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
+| `affine`        | If True, fit affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
 | `repeat`          | Number of iterations for this level. More repeats allow each block to deviate further from neighbors, despite smoothing. Typical values range from 1-10. Disable a level by setting repeats to 0.|
 
 
@@ -180,29 +181,24 @@ print(f'recipe has {len(recipe.levels)} levels')
 Alternatively, you can define a recipe from scratch using the `Recipe` class and its components. For example:
 
 ```python
-from warpfield.register import Recipe, RegFilter, LevelConfig, Smoother, Projector, RegistrationPyramid
+# create a basic recipe with one affine registration level and a default pre-filter:
+recipe = warpfield.Recipe()
 
-recipe = Recipe(
-    pre_filter= RegFilter(clip_thresh=10),
-    levels=[
-        LevelConfig(block_size=[-5, -5, -5], 
-                    smooth=Smoother(sigmas=[1.0, 1.0, 1.0]), 
-                    project=Projector(low=2.0, high=10.0), 
-                    affinify=True, 
-                    median_filter=False,
-                    repeat=20
-                   ),
-        LevelConfig(block_size=[-10, -10, -10], 
-                    smooth=Smoother(sigmas=[2.0, 2.0, 2.0]), 
-                    project=Projector(low=2.0, high=10.0), 
-                    repeat=10),        
-        LevelConfig(block_size=[32, 32, 32], 
-                    block_stride=0.5,
-                    smooth=Smoother(sigmas=[2.0, 2.0, 2.0]), 
-                    project=Projector(low=0.5, high=2.0), 
-                    repeat=5),
-    ]
-)
+# add non-rigid registration levels:
+recipe.add_level(block_size=[128,128,128])
+recipe.levels[-1].smooth.sigmas = [1.0,1.0,1.0]
+recipe.levels[-1].repeat = 5
+
+recipe.add_level(block_size=[64,64,64])
+recipe.levels[-1].block_stride = 0.5
+recipe.levels[-1].smooth.sigmas = [1.0,1.0,1.0]
+recipe.levels[-1].repeat = 5
+
+recipe.add_level(block_size=[32,32,32])
+recipe.levels[-1].block_stride = 0.5
+recipe.levels[-1].smooth.sigmas = [4.0,4.0,4.0]
+recipe.levels[-1].smooth.long_range_ratio = 0.1
+recipe.levels[-1].repeat = 5
 ```
 
 
