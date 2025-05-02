@@ -12,9 +12,8 @@ import nibabel as nib
 import pydicom
 import tifffile
 
+import warpfield
 from warpfield.utils import import_data
-from warpfield.register import register_volumes
-from warpfield.recipes import from_yaml
 
 try:
     import cupy as cp
@@ -120,9 +119,9 @@ def test_register_volumes():
     """Test the register_volumes function."""
     fixed = np.random.rand(256, 256, 256).astype("float32")
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift
-    recipe = from_yaml("default.yml")
+    recipe = warpfield.Recipe.from_yaml("default.yml")
 
-    registered, warp_map, _ = register_volumes(fixed, moving, recipe, verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
 
     assert registered.shape == fixed.shape, "Registered volume shape mismatch."
     assert (

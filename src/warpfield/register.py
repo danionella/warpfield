@@ -1,6 +1,8 @@
-from typing import List, Union, Callable
 import warnings
 import gc
+import pathlib
+import os
+from typing import List, Union, Callable
 
 import numpy as np
 import scipy.signal
@@ -408,6 +410,9 @@ class RegistrationPyramid:
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
         vol_tmp = vol_tmp0.copy()
         min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
+        if callback is not None:
+            callback_output.append(callback(vol_tmp))
+
         if np.any(self.mappers[-1].block_stride > min_block_stride[0]):
             warnings.warn(
                 "The block stride (in voxels) in the last level should not be larger than the block stride in any previous level (along any axis)."
@@ -623,7 +628,7 @@ class LevelConfig(BaseModel):
 
 
 class Recipe(BaseModel):
-    """Configuration for the registration recipe
+    """Configuration for the registration recipe. Recipe is initialized with a single affine level.
 
     Args:
         reg_filter (RegFilter, callable or None): Filter to be applied to the reference volume
@@ -631,4 +636,42 @@ class Recipe(BaseModel):
     """
 
     pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
-    levels: List[LevelConfig]
+    levels: List[LevelConfig] = [
+        LevelConfig(block_size=[-4, -4, -4], repeat=10, affine=True, median_filter=False, smooth=Smoother(sigmas=[0.5, 0.5, 0.5])),
+    ]
+
+    def add_level(self, block_size, **kwargs):
+        """Add a level to the registration recipe
+
+        Args:
+            block_size (list): shape of blocks, whose rigid displacement is estimated
+            **kwargs: additional arguments for LevelConfig
+        """
+        if isinstance(block_size, (int, float)):
+            block_size = [block_size] * 3
+        if len(block_size) != 3:
+            raise ValueError("block_size must be a list of 3 integers")
+        self.levels.append(LevelConfig(block_size=block_size, **kwargs))
+
+    @classmethod
+    def from_yaml(cls, yaml_path):
+        """Load a recipe from a YAML file
+
+        Args:
+            yaml_path (str): path to the YAML file
+
+        Returns:
+            Recipe: Recipe object
+        """
+        import yaml
+
+        this_file_dir = pathlib.Path(__file__).resolve().parent
+        if os.path.isfile(yaml_path):
+            yaml_path = yaml_path
+        else:
+            yaml_path = os.path.join(this_file_dir, 'recipes', yaml_path)
+
+        with open(yaml_path, "r") as f:
+            data = yaml.safe_load(f)
+
+        return cls.model_validate(data)

@@ -6,8 +6,7 @@ import h5py
 import hdf5plugin
 
 from .utils import import_data
-from .recipes import from_yaml
-from .register import register_volumes
+from .register import register_volumes, Recipe
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -42,7 +41,7 @@ def main():
         raise ValueError("Fixed and moving images must have the same shape.")
     # report shape
     logging.info(f"Volume shapes: {fixed_image.shape}")
-    recipe = from_yaml(args.recipe)
+    recipe = Recipe.from_yaml(args.recipe)
 
     # register
     logging.info("Registering the moving image to the fixed image...")
