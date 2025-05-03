@@ -10,7 +10,8 @@ dependencies:
   - pydantic
   - pyyaml
   - tqdm
-  - cupy<13.3
+  - cupy
+  - cuda-nvcc
   - cuda-version=12.2
   - h5py
   - hdf5plugin
