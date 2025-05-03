@@ -135,7 +135,8 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
 | `project.high`    | The σ<sub>high</sub> value for the 2D DoG filter. Default is 10.0 voxels (pixels).               |
 | `project.normalize`    | Whether to normalize the projections before calculating the cross-covariance (which would make it a cross-correlation). Defaults to False or 0.0. Values can range from 0.0 (False) to 1.0 (True). Values in between imply normalisation by `l2_norm**project.normalize`            |
-| `tukey_ref`    | if not None, apply a Tukey window to the reference projections (alpha = tukey_ref). Default is 0.5. The Tukey window can help reduce edge effects. |
+| `project.periodic_smooth` | If True, apply periodic smoothing. Default is False. This can help reduce block-edge effects (affecting FFT-based correlation). |
+| `tukey_ref`    | if not None, apply a Tukey window to the reference projections (alpha = tukey_ref). Default is 0.5. The Tukey window can reduce block-edge effects. |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
 | `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
@@ -152,37 +153,14 @@ Recipes can be loaded from YAML files (either those shipped with this package, s
 recipe = warpfield.recipes.from_yaml("default.yml")
 # or your own recipe:
 # recipe = warpfield.recipes.from_yaml("path/to/your/recipe.yaml")
-```
 
-You can then modify the recipe parameters as needed (this is a convenient option as long as the number of levels doesn't change). For example:
-
-```python
+# You can then modify recipe parameters programmatically, e.g.;
 recipe.pre_filter.clip_thresh=10
-
-recipe.levels[0].block_size = [-5,-5,-5]
-recipe.levels[0].smooth.sigmas=[1.0,1.0,1.0]
-recipe.levels[0].affinify = True
-recipe.levels[0].median_filter = False
-recipe.levels[0].repeat = 10
-
-recipe.levels[1].block_size = [-20,-10,-40]
-recipe.levels[1].smooth.sigmas=[2.0,2.0,2.0]
-recipe.levels[1].smooth.long_range_ratio = 0.05
-recipe.levels[1].repeat = 5
-
 recipe.levels[2].block_size = [32, 8, 32]
-recipe.levels[2].block_stride = 0.5
-recipe.levels[2].smooth.sigmas=[4.0,4.0,4.0]
-recipe.levels[2].smooth.long_range_ratio = 0.1
-recipe.levels[2].project.low = 1.0
-recipe.levels[2].project.high = 2.0
-recipe.levels[2].repeat = 5
-
-print(f'recipe has {len(recipe.levels)} levels')
+# ... etc.
 ```
 
-
-Alternatively, you can define a recipe from scratch using the `Recipe` class and its components. For example:
+Alternatively, you can define a recipe from scratch using the `Recipe` class. For example:
 
 ```python
 # create a basic recipe with one affine registration level and a default pre-filter:
