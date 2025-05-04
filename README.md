@@ -188,3 +188,5 @@ recipe.levels[-1].repeat = 5
 
 - [Advanced Normalization Tools in Python (ANTsPy)](https://github.com/ANTsX/ANTsPy)
 - [Computational Morphometry Toolkit (CMTK)](https://www.nitrc.org/projects/cmtk)
+- [Constrained Large Deformation Diffeomorphic Image Registration (CLAIRE)
+](https://github.com/andreasmang/claire)
