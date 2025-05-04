@@ -114,7 +114,7 @@ The output file is an HDF5 file containing the following datasets:
 
 ## Recipes
 
-The registration pipeline is defined by a recipe. The recipe consists of a pre-filter (`RegFilter`) that is applied to all volumes (typically a DoG filter to sharpen features) and list of level descriptors (`LevelConfig`), each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
+The registration pipeline is defined by a recipe. The recipe consists of a pre-filter that is applied to all volumes (typically a DoG filter to sharpen features) and list of levels, each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
 
 ### Recipe parameters
 
@@ -147,7 +147,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 ### Defining recipes
 
-Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](./src/warpfield/recipes/default.yml), or your own): 
+Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](https://github.com/danionella/warpfield/blob/main/src/warpfield/recipes/default.yml), or your own): 
 
 ```python
 recipe = warpfield.Recipe.from_yaml("default.yml")
