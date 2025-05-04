@@ -6,7 +6,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
 <img src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/>
-<sup>Example: region-level registration across different subjects (video slowed down ~5x). warpfield can also perform cell-level within-subject registrations of microscopy data.</sup>
+<sup>Example shown: region-level 3D registration across different subjects (video slowed down ~5x).</sup>
 
 # warpfield
 
