@@ -18,7 +18,7 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy<2",
     "scipy",
-    "cupy<13.3",
+    "cupy",
     "tqdm",
     "pydantic",
     "pyyaml",
