@@ -6,7 +6,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
 <img src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/>
-<sup>(registration of two different subjects – video slowed down ~5x)</sup>
+<sup>Example shown: region-level 3D registration across subjects (video slowed down ~5x). Cell-level registration of microscopy data is also possible.</sup>
 
 # warpfield
 
@@ -18,7 +18,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
-- Speedup typically > 1000x compared to CPU-based methods (seconds vs. hours)
+- Typical speedup compared to CPU-based methods: > 1000x (seconds vs. hours)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
@@ -29,7 +29,7 @@ The registration process aligns a moving 3D volume to a fixed reference volume b
 
 The key steps are:
 
-1. **Preprocessing**: Enhance features in the volumes (e.g., using Difference-of-Gaussian or DoG filtering) to improve registration accuracy.
+1. **Preprocessing**: Enhance features in the volumes (e.g., using Difference-of-Gaussian or 'DoG' filtering) to improve registration accuracy.
 2. **Block Matching**: Divide the volumes into smaller 3D blocks, project them to 2D (along each axis) for memory and compute efficiency, and calculate 2D cross-correlation maps. After smoothing these 2D maps across neighboring blocks, use their maxima to determine the block-level 3D displacement vector.
 3. **Displacement Field Estimation**: Combine block-level displacement vectors into a displacement field (and optionaly apply a median filter or fit an affine transform)
 4. **Warping**: Apply the displacement field to the moving volume to align it with the fixed volume.
@@ -43,7 +43,7 @@ The key steps are:
 
 ## Installation
 
-We recommend installing all dependencies via **conda** or **mamba**. Adjust cuda-version in `environment.yml` to your system, if needed.
+We recommend installing all dependencies via **conda** or **mamba**.
 
 ```bash
 # Change into the repository root directory, then type:
@@ -64,7 +64,7 @@ vol_mov = np.load("moving_volume.npy")
 recipe = warpfield.Recipe.from_yaml('default.yml')
 
 # 3. Register moving volume
-vol_mov_reg, warp_map, _ = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
+vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe)
 
 # 4. Optional: apply the transformation to another volume (same shape and resolution)
 vol_another_reg = warp_map.apply(vol_another)
@@ -188,3 +188,5 @@ recipe.levels[-1].repeat = 5
 
 - [Advanced Normalization Tools in Python (ANTsPy)](https://github.com/ANTsX/ANTsPy)
 - [Computational Morphometry Toolkit (CMTK)](https://www.nitrc.org/projects/cmtk)
+- [Constrained Large Deformation Diffeomorphic Image Registration (CLAIRE)
+](https://github.com/andreasmang/claire)
