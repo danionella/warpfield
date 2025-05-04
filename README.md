@@ -183,6 +183,24 @@ recipe.levels[-1].smooth.long_range_ratio = 0.1
 recipe.levels[-1].repeat = 5
 ```
 
+## Citing our work
+If you use `warpfield` in your research, please cite the paper that first described our registration approach:
+
+Hoffmann, M., Henninger, J. et al. Blazed oblique plane microscopy reveals scale-invariant inference of brain-wide population activity. Nature Communications 14, 8019 (2023). [https://doi.org/10.1038/s41467-023-43741-x](https://doi.org/10.1038/s41467-023-43741-x)
+
+```bibtex
+@article{Hoffmann2023,
+  title={Blazed oblique plane microscopy reveals scale-invariant inference of brain-wide population activity},
+  author={Hoffmann, Maximilian and Henninger, Jorg and Veith, Johannes and Richter, Lars and Judkewitz, Benjamin},
+  journal={Nature Communications},
+  volume={14},
+  number={1},
+  pages={8019},
+  year={2023},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41467-023-43741-x}
+}
+```
 
 ## See also
 
