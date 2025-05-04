@@ -5,16 +5,16 @@ channels:
 dependencies:
   - python>=3.9
   - pip
-  - numpy<2
-  - scipy
+  - numpy
   - pydantic
   - pyyaml
   - tqdm
   - cupy
   - cuda-nvcc
-  - cuda-version=12.2
+# required for the CLI:
   - h5py
   - hdf5plugin
   - nibabel
   - pydicom
   - tifffile
+  - scipy
