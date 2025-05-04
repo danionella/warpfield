@@ -2,5 +2,5 @@
 .. include:: ../../README.md
 """
 
-from . import register, recipes, utils
+from . import register, utils
 from .register import register_volumes, Recipe
