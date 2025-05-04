@@ -61,7 +61,7 @@ vol_ref = np.load("reference_volume.npy")
 vol_mov = np.load("moving_volume.npy")
 
 # 2. Choose registration recipe (here: loaded from a YAML file. See below for alternatives)
-recipe = warpfield.recipes.from_yaml('default.yml')
+recipe = warpfield.Recipe.from_yaml('default.yml')
 
 # 3. Register moving volume
 vol_mov_reg, warp_map, _ = warpfield.register.register_volume(vol_ref, vol_mov, recipe)
@@ -150,7 +150,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](./src/warpfield/recipes/default.yml), or your own): 
 
 ```python
-recipe = warpfield.recipes.from_yaml("default.yml")
+recipe = warpfield.Recipe.from_yaml("default.yml")
 # or your own recipe:
 # recipe = warpfield.recipes.from_yaml("path/to/your/recipe.yaml")
 
