@@ -510,6 +510,13 @@ class Projector(BaseModel):
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
+        """Apply a 2D projection and filters to a volume block
+        Args:
+            vol_blocks (cupy.array): Blocked volume to be projected (6D dataset, with the first 3 dimensions being blocks and the last 3 dimensions being voxels)
+            axis (int): Axis along which to project
+        Returns:
+            cupy.array: Projected volume block (5D dataset, with the first 3 dimensions being blocks and the last 2 dimensions being 2D projections)
+        """
         if self.max:
             out = vol_blocks.max(axis)
         else:
@@ -538,6 +545,13 @@ class Smoother(BaseModel):
     long_range_ratio: Union[float, None] = None
 
     def __call__(self, xcorr_proj, block_size=None):
+        """Apply a Gaussian filter to the cross-correlation data
+        Args:
+            xcorr_proj (cupy.array): cross-correlation data (5D array, with the first 3 dimensions being the blocks and the last 2 dimensions being the 2D projection)
+            block_size (list): shape of blocks, whose rigid displacement is estimated
+        Returns:
+            cupy.array: smoothed cross-correlation volume
+        """
         truncate = 4.0
         if self.sigmas is None:
             return xcorr_proj
@@ -580,6 +594,13 @@ class RegFilter(BaseModel):
     high: float = 10.0
 
     def __call__(self, vol, reg_mask=None):
+        """Apply the filter to the volume
+        Args:
+            vol (cupy or numpy array): 3D volume to be filtered
+            reg_mask (array): Mask for registration
+        Returns:
+            cupy.ndarray: Filtered volume
+        """
         vol = cp.clip(cp.array(vol, "float32", copy=False) - self.clip_thresh, 0, None)
         if reg_mask is not None:
             vol *= cp.array(reg_mask, dtype="float32", copy=False)

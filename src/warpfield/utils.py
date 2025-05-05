@@ -17,9 +17,8 @@ def import_data(file_path: str):
                          using the format '/path/to/file.h5:/group/key' or '/path/to/file.mat:variable_name'.
 
     Returns:
-        tuple: (data, metadata)
-            - data (np.ndarray): Loaded data as a NumPy array.
-            - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
+        - data (np.ndarray): Loaded data as a NumPy array.
+        - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
     """
 
     if file_path.endswith(".npy"):
