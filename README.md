@@ -43,10 +43,9 @@ The key steps are:
 
 ## Installation
 
-We recommend installing all dependencies via **conda** or **mamba**.
+We recommend installing all dependencies with [conda/mamba](https://github.com/conda-forge/miniforge). Clone this repository, change into its root directory, then type:
 
 ```bash
-# Change into the repository root directory, then type:
 mamba env create -n warpfield -f environment.yml
 mamba activate warpfield
 pip install -e .
