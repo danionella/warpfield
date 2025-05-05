@@ -473,9 +473,9 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         verbose (bool): If True, show progress bars. Default is True
 
     Returns:
-        numpy.array or cupy.array: Registered volume
-        WarpMap: Displacement field
-        list: List of outputs from the callback function
+        - numpy.array or cupy.array: Registered volume
+        - WarpMap: Displacement field
+        - list: List of outputs from the callback function
     """
     recipe.model_validate(recipe.model_dump())
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
