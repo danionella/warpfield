@@ -202,8 +202,7 @@ recipe.levels[-1].repeat = 5
 > video_fn = "registration.mp4"
 > vmax = 100 # to scale the video brightness
 > callback = lambda vol: vol.max(axis=1).get()/vmax # make sure the callback returns a 2D numpy array (input is a 3D cupy array)
-> vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)
-> ```
+> vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)```
 
 
 
