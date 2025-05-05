@@ -141,8 +141,8 @@ def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
         update_psf (bool): True for blind deconvolution
 
     Returns:
-        ndarray: deconvolved image
-        ndarray: psf
+        - ndarray: deconvolved image
+        - ndarray: psf
     """
 
     if psf is None and update_psf:

@@ -399,9 +399,9 @@ class RegistrationPyramid:
             callback (function): Callback function to be called after each level of registration
 
         Returns:
-            vol (array_like): Registered volume (numpy or cupy array, depending on input)
-            warp_map (WarpMap): Displacement field
-            callback_output (list): List of outputs from the callback function
+            - vol (array_like): Registered volume (numpy or cupy array, depending on input)
+            - warp_map (WarpMap): Displacement field
+            - callback_output (list): List of outputs from the callback function
         """
         was_numpy = isinstance(vol, np.ndarray)
         vol = cp.array(vol, "float32", copy=False, order="C")
@@ -468,8 +468,10 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         vol (numpy.array or cupy.array): Volume to be registered
         recipe (Recipe): Registration recipe
         reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
-        callback (function): Callback function to be called on the volume after each iteration. Can be used to
-            monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`. Default is None
+        callback (function): Callback function to be called on the volume after each iteration. Default is None. 
+            Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()` 
+            (note that `vol` is a cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
+            Callback outputs for each registration step will be returned as a list.
         verbose (bool): If True, show progress bars. Default is True
 
     Returns:
