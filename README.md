@@ -78,6 +78,9 @@ points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 ```
 
+> [!NOTE]  
+> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution.
+
 ## Command-Line Interface (CLI)
 
 The `warpfield` library provides a command-line interface. This allows you to perform registration directly from the terminal without writing Python code.
@@ -115,9 +118,6 @@ The output file is an HDF5 file containing the following datasets:
 ## Recipes
 
 The registration pipeline is defined by a recipe. The recipe consists of a pre-filter that is applied to all volumes (typically a DoG filter to sharpen features) and list of levels, each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
-
-> [!NOTE]  
-> Units for all parameters are in voxels unless otherwise specified. Physical units, scalings or other metadata that may be present in data files are ignored. Foxed and moving volumes are expected to be of the same shape and resolution.
 
 ### Recipe parameters
 
