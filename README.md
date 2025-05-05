@@ -194,15 +194,15 @@ recipe.levels[-1].repeat = 5
 ```
 
 > [!TIP]
-> The speed of `warpfield` enables rapid iterative optimization of the registration process. Start with a simple recipe, such as the one above. Deactivate all levels, except for the first affine level, by setting their `repeat` to 0. Confirm that the affine registration converged (increasing repeats should not change the result) and move on to the second level. If voxels are anisotropic, adjust `block_size` to make blocks more or less isotropic in real space. Inspect results as you change the settings and repeats of the second level, then add more fine-grained levels if necessary. Adjust `project.low` and `project.high` to the relevant feature size if needed (which may get smaller in finer levels). If the moving volume warps too much, consider larger blocks / fewer levels. Otherwise, increase `smooth.sigmas`, reduce repeats, or reduce `block_stride` to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes)) to observe each level and repeat of the registration process. It is very helpful for troubleshooting and for reducing compute time by adjusting the levels and repeats to the necessary minimum.
+> The speed of `warpfield` enables rapid iterative optimization of the registration process. Start with a simple recipe, such as the one above. Deactivate all levels, except for the first affine level, by setting their `repeat` to 0. Confirm that the affine registration converged (increasing repeats should not change the result) and move on to the second level. If voxels are anisotropic, adjust `block_size` to make blocks more or less isotropic in real space. Inspect results as you change the settings and repeats of the second level, then add more fine-grained levels if necessary. Adjust `project.low` and `project.high` to the relevant feature size if needed (which may get smaller in finer levels). If the moving volume warps too much, consider larger blocks / fewer levels. Otherwise, increase `smooth.sigmas`, reduce repeats, or reduce `block_stride` to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) and tip below) to observe each level and repeat of the registration process. It is very helpful for troubleshooting and for reducing compute time by adjusting the levels and repeats to the necessary minimum.
 
-Generating a video (you will need to `conda install imageio imageio-ffmpeg`):
-
-```python
-video_fn = "registration.mp4"
-callback = lambda vol: vol.max(axis=1).get() # make sure the callback returns a 2D numpy array (input is a 3D cupy array)
-vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)
-```
+> [!TIP]
+> Generating a video (you will need to `conda install imageio imageio-ffmpeg`):
+> ```python
+> video_fn = "registration.mp4"
+> callback = lambda vol: vol.max(axis=1).get() # make sure the callback returns a 2D numpy array (input is a 3D cupy array)
+> vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)
+> ```
 
 
 
