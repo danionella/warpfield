@@ -189,7 +189,7 @@ recipe.levels[-1].repeat = 5
 ```
 
 > [!TIP]
-> The speed of `warpfield` enables rapid iterative optimization of the registration. Start with a simple recipe with one or two layers, inspect results as you increase the repeats, then add more fine-grained layers if necessary. If the moving volume warps too much, increase `smooth.sigmas` and reduce repeats. Reduce the block_stride in the last layer to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `warpfield.register_volume` with a callback function (see [`register_volume`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes)) to observe each step of the registration process.
+> The speed of `warpfield` enables rapid iterative optimization of the registration. Start with a simple recipe with one or two layers, based on default.yml. Adjust `project.low` and `high` to your feature size if needed. Leave the first affine layer unchanged otherwise. Inspect results as you increase the repeats, then add more fine-grained layers if necessary. If voxels are unisotropic, make block_size more or less isotropic in real space. If the moving volume warps too much, increase `smooth.sigmas` and reduce repeats. Reduce the block_stride in the last layer to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `warpfield.register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes)) to observe each step of the registration process.
 
 ## Citing our work
 If you use `warpfield` in your research, please cite the paper that first described our registration approach:
