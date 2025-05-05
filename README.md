@@ -92,13 +92,13 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed image/volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
-- `--moving`: Path to the moving image/volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
-- `--recipe`: Path to the recipe YAML file for registration.
+- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.nii`, `.npy`, `.mat`). For hierarchical file formats (`.h5` or `.mat`), specify the dataset name using the format `filename.h5:dataset_name`. 
+- `--moving`: Path to the moving 3D volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
+- `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
 #### Optional Arguments
 
-- `--output`: Path to save the registered image/volume. Defaults to `<moving>_registered.h5` if not provided.
+- `--output`: Path to save the registered volume. Defaults to `<moving>_registered.h5` if not provided.
 - `--compression`: Compression method for saving the registered volume. Default is `gzip`.
 - `--invert`: Additionally, register the moving image to the fixed image.
 
@@ -115,6 +115,9 @@ The output file is an HDF5 file containing the following datasets:
 ## Recipes
 
 The registration pipeline is defined by a recipe. The recipe consists of a pre-filter that is applied to all volumes (typically a DoG filter to sharpen features) and list of levels, each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
+
+> [!NOTE]  
+> Units for all parameters are in voxels unless otherwise specified. Physical units, scalings or other metadata that may be present in data files are ignored. Foxed and moving volumes are expected to be of the same shape and resolution.
 
 ### Recipe parameters
 
