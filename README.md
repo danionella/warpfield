@@ -10,7 +10,7 @@
 
 # warpfield
 
-A GPU-accelerated Python library for non-rigid volumetric image registration / warping.
+A GPU-accelerated Python library for non-rigid 3D registration / warping.
 
 Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repository](https://github.com/danionella/warpfield)
 
@@ -72,14 +72,11 @@ vol_another_reg = warp_map.apply(vol_another)
 # 5. Optional: apply inverse transformation to the reference volume
 vol_ref_reg = warp_map.invert_fast().unwarp(vol_ref)
 
-# 6. Optional: apply the warp transformation to a set of coordiantes (3-by-n array, in voxel units)
+# 6. Optional: apply the warp transformation to a set of coordiantes (3-by-n array, in units of volume voxels)
 points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
 points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 ```
-
-> [!NOTE]  
-> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution.
 
 ## Command-Line Interface (CLI)
 
@@ -92,6 +89,9 @@ python -m warpfield --fixed <fixed_image_path> --moving <moving_image_path> --re
 # You can use the `--help` flag to see detailed instructions for the CLI:
 python -m warpfield --help
 ```
+
+> [!NOTE]  
+> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution.
 
 #### Required Arguments
 
@@ -115,6 +115,8 @@ The output file is an HDF5 file containing the following datasets:
   - `/block_stride`: The block stride (in voxels).
 - `/fixed_reg_inv` (optional): The fixed image registered to the moving image (if `--invert` is used).
 
+
+
 ## Recipes
 
 The registration pipeline is defined by a recipe. The recipe consists of a pre-filter that is applied to all volumes (typically a DoG filter to sharpen features) and list of levels, each of which contains a set of parameters for the registration process. Typically, each level corresponds to a different resolution of the displacement field (the block size), with the first level being the coarsest and the last level being the finest.
@@ -131,8 +133,8 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `block_size`      | Shape of blocks, whose rigid displacement is estimated. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide axis into this many blocks" (e.g. [-5, -5, -5] results in 5 blocks along each axis)|
-| `block_stride`    | Block stride – determines whether blocks overlap. Either list of int (stride sizes in voxels) or scalar float (fraction of block_size). Default is 1.0 (no overlap). Set this to a smaller value (e.g. 0.5) for overlaping blocks and higher precision, but larger (e.g. 8x) memory footprint   |
+| `block_size`      | Shape of blocks, into which the volume is divided. Positive numbers indicate block shape in voxels (e.g. [32, 16, 32]), while negative numbers are interpreted as "divide volume shape by this number" (e.g. [-5, -5, -5] results in 5 blocks along each axis, when block stride is 1.0)|
+| `block_stride`    | Determines whether blocks overlap. Either list of 3 integer values (block center distances, or strides, in voxels) or scalar float (fraction of block_size). Default is 1.0 (no block overlap). Set this to a smaller value (e.g. 0.5) for overlaping blocks and higher precision, but larger (e.g. 8x) memory footprint   |
 | `project.max`     | If True, apply 3D -> 2D max projections to each volume block. If false, apply mean projections. Default is True           |
 | `project.dog`     | If True, apply a DoG filter to each 2D projection. Default is True           |
 | `project.low`     | The σ<sub>low</sub> value for the 2D DoG filter. Default is 0.5 voxels (pixels).                 |
