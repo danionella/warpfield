@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
 from .warp import unwarp_volume
-from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block
+from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block, create_rgb_video
 from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow, periodic_smooth_decomposition_nd_rfft
 
 ArrayType = Union[np.ndarray, cp.ndarray]
@@ -460,7 +460,7 @@ class RegistrationPyramid:
         return vol, warp_map, callback_output
 
 
-def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
+def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_fn=None):
     """Register a volume to a reference volume using a registration pyramid.
 
     Args:
@@ -468,11 +468,13 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         vol (numpy.array or cupy.array): Volume to be registered
         recipe (Recipe): Registration recipe
         reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
-        callback (function): Callback function to be called on the volume after each iteration. Default is None. 
-            Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()` 
-            (note that `vol` is a cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
+        callback (function): Callback function to be called on the volume after each iteration. Default is None.
+            Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`
+            (note that `vol` is a 3D cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
             Callback outputs for each registration step will be returned as a list.
         verbose (bool): If True, show progress bars. Default is True
+        video_fn (str): If not None and a callback function is provided, save the video of the registration process to this file. Default is None.
+            Note: this will only work if a callback function call returns a 2D numpy array. You will need to to install imageio and imageio-ffmpeg.
 
     Returns:
         - numpy.array or cupy.array: Registered volume
@@ -486,6 +488,13 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
     gc.collect()
     cp.fft.config.get_plan_cache().clear()
     cp.get_default_memory_pool().free_all_blocks()
+    if video_fn is not None and callback is not None:
+        try:
+            assert cbout[0].ndim == 2, "Callback output must be a 2D array"
+            ref = callback(recipe.pre_filter(ref))
+            create_rgb_video(video_fn, ref, np.array(cbout), fps=10)
+        except (ValueError, AssertionError) as e:
+            warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
 
 
@@ -643,7 +652,13 @@ class Recipe(BaseModel):
 
     pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
-        LevelConfig(block_size=[-4, -4, -4], repeat=10, affine=True, median_filter=False, smooth=Smoother(sigmas=[0.5, 0.5, 0.5])),
+        LevelConfig(
+            block_size=[-4, -4, -4],
+            repeat=10,
+            affine=True,
+            median_filter=False,
+            smooth=Smoother(sigmas=[0.5, 0.5, 0.5]),
+        )
     ]
 
     def add_level(self, block_size, **kwargs):
@@ -675,7 +690,7 @@ class Recipe(BaseModel):
         if os.path.isfile(yaml_path):
             yaml_path = yaml_path
         else:
-            yaml_path = os.path.join(this_file_dir, 'recipes', yaml_path)
+            yaml_path = os.path.join(this_file_dir, "recipes", yaml_path)
 
         with open(yaml_path, "r") as f:
             data = yaml.safe_load(f)

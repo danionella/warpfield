@@ -55,7 +55,7 @@ def import_data(file_path: str):
             "The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
         )
         nii = nib.load(file_path)
-        data = np.asanyarray(nii.get_fdata(), order='C').astype('float32')
+        data = np.asanyarray(nii.get_fdata(), order="C").astype("float32")
         metadata = {"affine": nii.affine, "header": dict(nii.header)}  # Transformation matrix  # Header information
         return data, dict(filetype="nifti", path=file_path, meta=metadata)
 
@@ -221,3 +221,33 @@ def upsampled_dft_rfftn(
     patch = cp.einsum("b m N, b n N -> b m n", out1, kx)
 
     return patch.real.reshape(*batch_shape, m, n)
+
+
+def create_rgb_video(fn, reference, moving, fps=10, quality=9):
+    """
+    Create an RGB video from three separate channels (R, G, B).
+
+    Args:
+        fn (str): Filename for the output video.
+        reference (ndarray): 2D stationary reference image data
+        moving (ndarray): 3D moving image data
+
+
+    Returns:
+        ndarray: RGB video.
+    """
+    try:
+        import imageio
+    except ImportError:
+        raise ImportError(
+            "The 'imageio' and 'imageio-ffmpeg' packages are required to create videos. "
+            + "Please install them via 'conda install imageio imageio-ffmpeg'"
+        )
+
+    rgb = np.zeros((*moving.shape, 3), dtype="float32")
+    rgb[..., 0] = moving
+    rgb[..., 1] = reference[None]
+
+    vf = r"drawtext=text='# %{n}':x=w-text_w-20:y=h-text_h-20:fontsize=24:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
+
+    imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
