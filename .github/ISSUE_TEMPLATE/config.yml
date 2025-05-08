@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: General Questions
+  - name: General Discussion
     url: https://github.com/danionella/warpfield/discussions
-    about: For general questions or discussions, please visit our Discussions page.
-  - name: Feedback
-    url: https://github.com/danionella/warpfield/discussions
-    about: To tell us how `warpfield` works for you, please visit our Discussions page.
+    about: For general questions, please visit our Discussions page.
+  - name: Questions
+    url: https://github.com/danionella/warpfield/discussions/categories/q-a
+    about: For general questions, please visit our Q&A page.
