@@ -205,23 +205,24 @@ recipe.levels[-1].repeat = 5
 > vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)
 > ```
 
-## Feedback and contributing
+## Feedback and contributions
 
 We value your feedback and contributions to improve `warpfield`! Here's how you can help:
 
-- **Bug Reports**: If you encounter any issues or unexpected behavior, please [open a bug report](https://github.com/danionella/warpfield/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D).
-- **Feature Requests**: Have an idea for a new feature or improvement? Let us know by [submitting a feature request](https://github.com/danionella/warpfield/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
-- **General Questions or Kudos**: Join the conversation in our [Discussions](https://github.com/danionella/warpfield/discussions). Whether you have questions, ideas, or just want to share how `warpfield` has helped your work, we'd like to hear from you!
+- **Bug reports**: If you encounter any issues or unexpected behavior, please [open a bug report](https://github.com/danionella/warpfield/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D).
+- **Feature requests**: Have an idea for a new feature or improvement? Let us know by [submitting a feature request](https://github.com/danionella/warpfield/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
+- **General discussion**: Join the conversation in our [Discussions](https://github.com/danionella/warpfield/discussions). Whether you have questions, ideas, or just want to share how `warpfield` has helped your work, we'd like to hear from you!
+- **Questions**: If you have questions about using `warpfield`, post them in [Q&A](https://github.com/danionella/warpfield/discussions/categories/q-a).
 
-#### Contributing Code
+#### Contributing code or documentation
 
 Whether it's fixing a bug, adding a feature, or improving documentation, your help is appreciated. To contribute, fork the repository, make your changes in a feature branch, and submit a pull request (PR) for review. Please follow these minimum standards:
 
 - Code Quality: Write clean, readable, and well-documented code.
 - Testing: Include tests for new features or bug fixes.
-- Discussion: For significant changes, please open an issue or start a discussion first to align with the project's goals.
+- If your change doesn't concern an existing issue or discussion, please create one first to explain the motivation behind your change.
 
-Thank you for helping make warpfield better for everyone!
+Thank you for your support!
 
 ## Citing our work
 If you use `warpfield` in your research, please cite the paper that first described our registration approach:
