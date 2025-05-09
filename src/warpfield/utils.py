@@ -35,18 +35,10 @@ def import_data(file_path: str):
             attrs = dict(f[key].attrs)  # Extract attributes as metadata
         return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
 
-    elif file_path.endswith(".h5") or file_path.endswith(".hdf5"):
-        raise ValueError(f"HDF5 file path was provided without dataset key (example: /path/to/file.h5:/dataset)")
-
-    elif ".mat:" in file_path:
-        from scipy.io import loadmat
-
-        file_path, variable_name = file_path.split(":", 1)
-        mat_data = loadmat(file_path)
-        if variable_name not in mat_data:
-            raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
-        data = mat_data[variable_name]
-        return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
+    elif file_path.endswith(".h5") or file_path.endswith(".hdf5") or file_path.endswith(".mat"):
+        raise ValueError(
+            f"File path {file_path} was provided without dataset key (example: /path/to/file.h5:dataset_name)"
+        )
 
     elif file_path.endswith(".nii") or file_path.endswith(".nii.gz"):
         try:
@@ -60,6 +52,15 @@ def import_data(file_path: str):
         data = np.asanyarray(nii.get_fdata(), order="C").astype("float32")
         metadata = {"affine": nii.affine, "header": dict(nii.header)}  # Transformation matrix  # Header information
         return data, dict(filetype="nifti", path=file_path, meta=metadata)
+
+    elif file_path.endswith(".tiff") or file_path.endswith(".tif"):
+        try:
+            import tifffile
+        except ImportError:
+            raise ImportError("The 'tifffile' package is required to load TIFF files. Please install it.")
+        data = tifffile.imread(file_path)
+        tiff_meta = tifffile.TiffFile(file_path).pages[0].tags._dict  # Extract TIFF metadata
+        return data, dict(filetype="tiff", path=file_path, meta=tiff_meta)
 
     elif file_path.endswith(".dcm"):
         try:
@@ -79,14 +80,15 @@ def import_data(file_path: str):
         }
         return data, dict(filetype="dicom", path=file_path, meta=metadata)
 
-    elif file_path.endswith(".tiff") or file_path.endswith(".tif"):
-        try:
-            import tifffile
-        except ImportError:
-            raise ImportError("The 'tifffile' package is required to load TIFF files. Please install it.")
-        data = tifffile.imread(file_path)
-        tiff_meta = tifffile.TiffFile(file_path).pages[0].tags._dict  # Extract TIFF metadata
-        return data, dict(filetype="tiff", path=file_path, meta=tiff_meta)
+    elif ".mat:" in file_path:
+        from scipy.io import loadmat
+
+        file_path, variable_name = file_path.split(":", 1)
+        mat_data = loadmat(file_path)
+        if variable_name not in mat_data:
+            raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
+        data = mat_data[variable_name]
+        return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
 
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
