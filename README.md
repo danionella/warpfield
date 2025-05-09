@@ -203,7 +203,7 @@ recipe.levels[-1].repeat = 5
 > units_per_voxel = [2,3,4] # voxel aspect ratio or physical dimensions (e.g. µm)
 > vol_mov_reg, warp_map, _ = warpfield.register_volumes_with_video(vol_ref, vol_mov, recipe, video_fn=video_fn, units_per_voxel=units_per_voxel)
 > ```
-> See [`warpfield.register.register_volumes_with_video`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes_with_video) documentation.
+> See [`register_volumes_with_video`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes_with_video) documentation.
 
 ## Feedback and contributions
 
