@@ -21,7 +21,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Python API and command-line interface (CLI)
-- Support for `.h5`, `.mat`, `.tiff`, `.npy` and `.nii` file formats
+- Support for `.h5`, `.nii`, `.tiff`, `.npy` and `.mat` file formats
 
 ### General Principle
 
@@ -94,13 +94,13 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.nii`, `.npy`, `.mat`). For hierarchical file formats (`.h5` or `.mat`), specify the dataset name using the format `filename.h5:dataset_name`. 
-- `--moving`: Path to the moving 3D volume file (e.g., `.nii`, `.h5`, `.npy`, etc.).
+- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.nii`, `.tiff`, `.npy`, `.mat`). For hierarchical file formats (`.h5` or `.mat`), specify the dataset name using the format `filename.h5:dataset_name`. 
+- `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
 #### Optional Arguments
 
-- `--output`: Path to save the registered volume. Defaults to `<moving>_registered.h5` if not provided.
+- `--output`: Path to save the registered volume (`.h5`). Defaults to `<moving>_registered.h5` if not provided.
 - `--compression`: Compression method for saving the registered volume. Default is `gzip`.
 - `--invert`: Additionally, register the moving image to the fixed image.
 
