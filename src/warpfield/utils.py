@@ -394,3 +394,42 @@ def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
         return mips.get()
 
     return wrapped
+
+
+def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1, 1], width=800, vmax=1, ):
+    """
+    Create a mosaic of slices from a 3D dataset along a specified axis, adjusting for voxel aspect ratio.
+
+    Args:
+        num_slices (int): The number of slices to include in the mosaic.
+        axis (int): The axis along which to extract slices.
+        
+
+    Returns:
+        np.ndarray: A 2D mosaic image of the selected slices.
+    """
+    try:
+        from skimage.util import montage
+    except ImportError:
+        raise ImportError("The 'scikit-image' package is required to create mosaics. Please install it.")
+    def wrapped(data):
+        data = cp.array(data, copy=False, dtype='float32')
+        slice_indices = np.linspace(0, data.shape[axis] - 1, num_slices+1, dtype=int)
+        slices = []
+        for i in range(len(slice_indices)-1):
+            slices.append(cp.take(data, cp.arange(slice_indices[i], slice_indices[i+1]), axis=axis).mean(axis))
+        slices = cp.array(slices)
+        aspect_ratio = np.array([units_per_voxel[i] for i in range(3) if i != axis])
+        slices = slices.get()
+        mosaic = montage(slices)
+        zoom_factors = min(width / mosaic.shape[1], 1) * aspect_ratio / aspect_ratio[1]
+        mosaic = (cupyx.scipy.ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax)
+        if transpose: 
+            mosaic = mosaic.T
+        return mosaic.get()
+    return wrapped
+
+
+def showvid(filename, width=600, embed=False):
+    from IPython.display import Video
+    return Video(filename, embed=embed, width=width, html_attributes='controls loop')
