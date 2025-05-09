@@ -13,7 +13,7 @@ import pydicom
 import tifffile
 
 import warpfield
-from warpfield.utils import import_data
+from warpfield.utils import load_data
 
 try:
     import cupy as cp
@@ -39,7 +39,7 @@ def test_import_npy(tmp_path):
     data = np.random.rand(10, 10, 10).astype("float32")
     np.save(file_path, data)
 
-    loaded_data, meta = import_data(str(file_path))
+    loaded_data, meta = load_data(str(file_path))
     assert np.allclose(loaded_data, data), "Loaded .npy data does not match expected data."
 
 
@@ -50,7 +50,7 @@ def test_import_h5(tmp_path):
     with h5py.File(file_path, "w") as f:
         f.create_dataset("dataset", data=data)
 
-    loaded_data, meta = import_data(f"{file_path}:dataset")
+    loaded_data, meta = load_data(f"{file_path}:dataset")
     assert np.allclose(loaded_data, data), "Loaded .h5 data does not match expected data."
 
 
@@ -61,7 +61,7 @@ def test_import_nii(tmp_path):
     nii = nib.Nifti1Image(data, affine=np.eye(4))
     nib.save(nii, file_path)
 
-    loaded_data, meta = import_data(str(file_path))
+    loaded_data, meta = load_data(str(file_path))
     assert np.allclose(loaded_data, data), "Loaded .nii data does not match expected data."
 
 
@@ -99,7 +99,7 @@ def test_import_dicom(tmp_path):
     pydicom.filewriter.dcmwrite(file_path, dicom, enforce_file_format=True)
 
     # Test the import_data function
-    loaded_data, meta = import_data(str(file_path))
+    loaded_data, meta = load_data(str(file_path))
     assert loaded_data.shape == data.shape, "Loaded .dcm data shape does not match expected data."
     assert np.array_equal(loaded_data, data), "Loaded .dcm data does not match expected data."
 
@@ -110,7 +110,7 @@ def test_import_tiff(tmp_path):
     data = np.random.rand(10, 10, 10).astype("float32")
     tifffile.imwrite(file_path, data)
 
-    loaded_data, meta = import_data(str(file_path))
+    loaded_data, meta = load_data(str(file_path))
     assert np.allclose(loaded_data, data), "Loaded .tiff data does not match expected data."
 
 

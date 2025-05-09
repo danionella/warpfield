@@ -10,7 +10,7 @@ import h5py
 import hdf5plugin
 
 
-def import_data(file_path: str):
+def load_data(file_path: str):
     """
     Import data from various file types, including .npy, .nii, .h5, .mat, DICOM, and TIFF.
 
