@@ -510,7 +510,8 @@ def register_volumes_with_video(
         callback (function): Callback function to be called on the volume after each iteration. Default is None.
             Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`
             (note that `vol` is a 3D cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
-            Callback outputs for each registration step will be returned as a list.
+            Callback outputs for each registration step will be returned as a list. If not provided, a default callback
+            creating maximum intensity projections will be used (`warpfield.utils.mips_callback`)
         verbose (bool): If True, show progress bars. Default is True
         video_fn (str): If not None and a callback function is provided, save the video of the registration process to this file. Default is None.
             Note: this will only work if a callback function call returns a 2D numpy array. You will need to to install imageio and imageio-ffmpeg.
