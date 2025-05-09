@@ -3,4 +3,4 @@
 """
 
 from . import register, utils
-from .register import register_volumes, Recipe
+from .register import register_volumes, Recipe, register_volumes_with_video
