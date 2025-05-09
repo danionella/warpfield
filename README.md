@@ -18,10 +18,10 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 ### Features
 
 - GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
-- Typical speedup compared to CPU-based methods: > 1000x (seconds vs. hours)
+- Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
-- Support for .h5, .npy, .nii and .tiff file formats
 - Python API and command-line interface (CLI)
+- Support for `.h5`, `.mat`, `.tiff`, `.npy` and `.nii` file formats
 
 ### General Principle
 
@@ -211,7 +211,7 @@ We value your feedback and contributions to improve `warpfield`! Here's how you 
 
 - **Bug reports**: If you encounter any issues or unexpected behavior, please [open a bug report](https://github.com/danionella/warpfield/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D).
 - **Feature requests**: Have an idea for a new feature or improvement? Let us know by [submitting a feature request](https://github.com/danionella/warpfield/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D).
-- **General discussion**: Join the conversation in our [Discussions](https://github.com/danionella/warpfield/discussions). Whether you have questions, ideas, or just want to share how `warpfield` has helped your work, we'd like to hear from you!
+- **General discussion**: Start a conversation in our [Discussions](https://github.com/danionella/warpfield/discussions). Whether you have questions, ideas, or just want to share how `warpfield` has helped your work, we'd like to hear from you!
 - **Questions**: If you have questions about using `warpfield`, post them in [Q&A](https://github.com/danionella/warpfield/discussions/categories/q-a).
 
 #### Contributing code or documentation
