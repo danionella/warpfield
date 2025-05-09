@@ -5,7 +5,7 @@
 [![Conda Version](https://img.shields.io/conda/v/danionella/warpfield)](https://anaconda.org/danionella/warpfield)
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
-<img width="1000" src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/> <br>
+<img width="800" src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/> <br>
 <sup>Example shown: region-level 3D registration across subjects (video slowed down ~5x). Cell-level registration of microscopy data is also possible.</sup>
 
 # warpfield
