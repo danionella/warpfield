@@ -499,8 +499,9 @@ def register_volumes_with_video(
     units_per_voxel=[1, 1, 1],
     axes=[0, 1, 2],
     vmax=None,
+    width=1024
 ):
-    """Register a volume to a reference volume using a registration pyramid, and save a video of the registration process.
+    """Register a volume to a reference volume using a registration pyramid (see `register_volumes`), and save a video of the registration process.
 
     Args:
         ref (numpy.array or cupy.array): Reference volume
@@ -518,7 +519,8 @@ def register_volumes_with_video(
             If video_fn is not None and no callback function is provided, a default callback function will be used that generates MIPs of the volume.
         units_per_voxel (list): Units per voxel in the reference volume (e.g. µm or mm). Default is [1, 1, 1].
         axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
-        vmax (float): Maximum pixel value (to scale video brightness).
+        vmax (float): Maximum pixel value (to scale video brightness). If none, set to 99.9 percentile of the reference volume.
+        width (int): Maximum width of the video in pixels. Defaults to 1024
 
     Returns:
         - numpy.array or cupy.array: Registered volume
@@ -528,11 +530,10 @@ def register_volumes_with_video(
 
     if video_fn is not None and callback is None:
         if vmax is None:
-            ref = cp.array(ref, dtype="float32", copy=False, order="C")
-            vmax = cp.percentile(ref, 99.9).item()
-        callback = mips_callback(vmax=vmax, units_per_voxel=units_per_voxel, width=1024, axes=axes)
+            vmax = cp.percentile(cp.array(ref, copy=False), 99.9).item()
+        callback = mips_callback(vmax=vmax, units_per_voxel=units_per_voxel, width=width, axes=axes)
     registered_vol, warp_map, cbout = register_volumes(
-        ref, vol, recipe, reg_mask=reg_mask, callback=callback, verbose=True
+        ref, vol, recipe, reg_mask=reg_mask, callback=callback, verbose=verbose
     )
     if video_fn is not None:
         try:
