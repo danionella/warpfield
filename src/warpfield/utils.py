@@ -430,6 +430,7 @@ def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1
     return wrapped
 
 
-def showvid(filename, width=600, embed=False):
+def showvid(filename, width=600, embed=False, loop=True):
     from IPython.display import Video
-    return Video(filename, embed=embed, width=width, html_attributes='controls loop')
+    html_attributes = "controls loop" if loop else "controls"
+    return Video(filename, embed=embed, width=width, html_attributes=html_attributes)
