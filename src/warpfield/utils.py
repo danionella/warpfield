@@ -1,7 +1,9 @@
 import warnings
+from functools import partial
 
 import numpy as np
 import cupy as cp
+import cupyx.scipy.ndimage
 import scipy.ndimage
 
 import h5py
@@ -254,3 +256,139 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
 
     imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
+
+
+def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
+    """
+    Generate 3 maximum intensity projections (MIPs) of a 3D array and tile them in a typical MIP view layout,
+    rearranged and transposed according to the specified axes.
+
+    Args:
+        data (cp.ndarray): A 3D array representing the volume (CuPy array).
+        units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
+        width (int): The maximum width of the output 2D array.
+        axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+
+    Returns:
+        cp.ndarray: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
+    """
+
+    axes = np.array(axes)
+    units_per_voxel = np.array(units_per_voxel)
+
+    # Compute the MIPs along the three original axes (z, y, x)
+    mips = [cp.max(data, axis=ax) for ax in range(3)]  # [YX, ZX, ZY]
+
+    # Rearrange and transpose the MIPs based on the new axis order
+    reordered_mips = []
+    sizes = []
+    for i, ax in enumerate(axes):
+        mip = mips[ax]
+        ax2d = axes[axes != ax]
+        if np.argsort(ax2d)[0] != 0:
+            mip = mip.T
+        sz = np.array(mip.shape) * units_per_voxel[ax2d]
+        reordered_mips.append(mip)
+        sizes.append(sz)
+
+    # Determine the scaling factor to fit within the specified width
+    max_physical_width = sizes[0][1] + sizes[2][0]  # Total physical width (x-axis)
+    scale = min(width / max_physical_width, 1.0)
+
+    # Resize each MIP to the correct scale
+    def resize_image(image, target_shape):
+        scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
+        return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
+
+    resized_mips = [
+        resize_image(mip, (int(size[0] * scale), int(size[1] * scale))) for mip, size in zip(reordered_mips, sizes)
+    ]
+
+    # Determine the canvas size
+    canvas_height = resized_mips[0].shape[0] + resized_mips[1].shape[0]  # y + z
+    canvas_width = resized_mips[0].shape[1] + resized_mips[2].shape[0]  # x + z
+    canvas = cp.zeros((canvas_height, canvas_width), dtype=data.dtype)
+
+    # Place the MIPs on the canvas
+    canvas[: resized_mips[0].shape[0], : resized_mips[0].shape[1]] = resized_mips[0]  # YX (top-left)
+    canvas[: resized_mips[2].shape[1], resized_mips[0].shape[1] :] = resized_mips[2].T  # ZY (top-right)
+    canvas[resized_mips[0].shape[0] :, : resized_mips[1].shape[1]] = resized_mips[1]  # ZX (bottom-left)
+
+    return canvas
+
+
+def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
+    """
+    Generate 3 maximum intensity projections (MIPs) of a 3D array and tile them in a typical MIP view layout,
+    rearranged and transposed according to the specified axes.
+
+    Args:
+        data (cp.ndarray): A 3D array representing the volume (CuPy array).
+        units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
+        width (int): The maximum width of the output 2D array.
+        axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+
+    Returns:
+        cp.ndarray: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
+    """
+    axes = np.array(axes)
+    units_per_voxel = np.array(units_per_voxel)
+
+    # Compute the MIPs along the three original axes (z, y, x)
+    mips = [cp.max(data, axis=ax) for ax in range(3)]  # [YX, ZX, ZY]
+
+    # Rearrange and transpose the MIPs based on the new axis order
+    reordered_mips = []
+    sizes = []
+    for i, ax in enumerate(axes):
+        mip = mips[ax]
+        ax2d = axes[axes != ax]
+        if np.argsort(ax2d)[0] != 0:
+            mip = mip.T
+        sz = np.array(mip.shape) * units_per_voxel[ax2d]
+        reordered_mips.append(mip)
+        sizes.append(sz)
+
+    # Determine the scaling factor to fit within the specified width
+    scale = min(width / (sizes[0][1] + sizes[2][0]), 1 / np.min(units_per_voxel))
+
+    # Resize each MIP to the correct scale
+    def resize_image(image, target_shape):
+        scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
+        return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
+
+    resized_mips = [resize_image(mip, (int(size[0] * scale + 0.5), int(size[1] * scale + 0.5))) for mip, size in zip(reordered_mips, sizes)]
+
+    # Determine the canvas size
+    canvas_height = resized_mips[0].shape[0] + resized_mips[1].shape[0]  # y + z
+    canvas_width = resized_mips[0].shape[1] + resized_mips[2].shape[0]  # x + z
+    canvas = cp.zeros((canvas_height, canvas_width), dtype=data.dtype)
+
+    # Place the MIPs on the canvas
+    canvas[: resized_mips[0].shape[0], : resized_mips[0].shape[1]] = resized_mips[0]  # YX (top-left)
+    canvas[: resized_mips[2].shape[1], resized_mips[0].shape[1] :] = resized_mips[2].T  # ZY (top-right)
+    canvas[resized_mips[0].shape[0] :, : resized_mips[1].shape[1]] = resized_mips[1]  # ZX (bottom-left)
+
+    return canvas
+
+
+def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
+    """
+    Return Callback function to generate MIPs for a given volume.
+
+    Args:
+        vmax (float): The maximum value for scaling the MIPs.
+        units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
+        width (int): The maximum width of the output 2D array.
+        axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+
+    Returns:
+        function: A function that takes a 3D cupy volume and returns the MIPs as 2D numpy array.
+    """
+
+    def wrapped(vol):
+        mips = get_mips(vol, units_per_voxel=units_per_voxel, width=width, axes=axes)
+        mips = mips / vmax
+        return mips.get()
+
+    return wrapped

@@ -200,10 +200,10 @@ recipe.levels[-1].repeat = 5
 > Generating videos of the registration process (you will need to `conda install imageio imageio-ffmpeg`):
 > ```python
 > video_fn = "registration.mp4"
-> vmax = 100 # to scale the video brightness
-> callback = lambda vol: vol.max(axis=1).get()/vmax # make sure the callback returns a 2D numpy array (input is a 3D cupy array)
-> vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe, callback=callback, video_fn=video_fn)
+> units_per_voxel = [2,3,4] # voxel aspect ratio or physical dimensions (e.g. µm)
+> vol_mov_reg, warp_map, _ = warpfield.register_volumes_with_video(vol_ref, vol_mov, recipe, video_fn=video_fn, units_per_voxel=units_per_voxel)
 > ```
+> See `warpfield.register.register_volumes_with_video` for documentation.
 
 ## Feedback and contributions
 

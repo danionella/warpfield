@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
 from .warp import unwarp_volume
-from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block, create_rgb_video
+from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block, create_rgb_video, mips_callback
 from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow, periodic_smooth_decomposition_nd_rfft
 
 ArrayType = Union[np.ndarray, cp.ndarray]
@@ -460,8 +460,47 @@ class RegistrationPyramid:
         return vol, warp_map, callback_output
 
 
-def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_fn=None):
+def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
     """Register a volume to a reference volume using a registration pyramid.
+
+    Args:
+        ref (numpy.array or cupy.array): Reference volume
+        vol (numpy.array or cupy.array): Volume to be registered
+        recipe (Recipe): Registration recipe
+        reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
+        callback (function): Callback function to be called on the volume after each iteration. Default is None.
+            Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`
+            (note that `vol` is a 3D cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
+            Callback outputs for each registration step will be returned as a list.
+        verbose (bool): If True, show progress bars. Default is True
+
+    Returns:
+        - numpy.array or cupy.array: Registered volume
+        - WarpMap: Displacement field
+        - list: List of outputs from the callback function
+    """
+    recipe.model_validate(recipe.model_dump())
+    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
+    registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
+    del reg
+    gc.collect()
+    cp.fft.config.get_plan_cache().clear()
+    return registered_vol, warp_map, cbout
+
+
+def register_volumes_with_video(
+    ref,
+    vol,
+    recipe,
+    reg_mask=1,
+    callback=None,
+    verbose=True,
+    video_fn=None,
+    units_per_voxel=[1, 1, 1],
+    axes=[0, 1, 2],
+    vmax=None,
+):
+    """Register a volume to a reference volume using a registration pyramid, and save a video of the registration process.
 
     Args:
         ref (numpy.array or cupy.array): Reference volume
@@ -475,20 +514,26 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         verbose (bool): If True, show progress bars. Default is True
         video_fn (str): If not None and a callback function is provided, save the video of the registration process to this file. Default is None.
             Note: this will only work if a callback function call returns a 2D numpy array. You will need to to install imageio and imageio-ffmpeg.
+            If video_fn is not None and no callback function is provided, a default callback function will be used that generates MIPs of the volume.
+        units_per_voxel (list): Units per voxel in the reference volume (e.g. µm or mm). Default is [1, 1, 1].
+        axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+        vmax (float): Maximum pixel value (to scale video brightness).
 
     Returns:
         - numpy.array or cupy.array: Registered volume
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    recipe.model_validate(recipe.model_dump())
-    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
-    registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
-    del reg
-    gc.collect()
-    cp.fft.config.get_plan_cache().clear()
-    cp.get_default_memory_pool().free_all_blocks()
-    if video_fn is not None and callback is not None:
+
+    if video_fn is not None and callback is None:
+        if vmax is None:
+            ref = cp.array(ref, dtype="float32", copy=False, order="C")
+            vmax = cp.percentile(ref, 99.9).item()
+        callback = mips_callback(vmax=vmax, units_per_voxel=units_per_voxel, width=1024, axes=axes)
+    registered_vol, warp_map, cbout = register_volumes(
+        ref, vol, recipe, reg_mask=reg_mask, callback=callback, verbose=True
+    )
+    if video_fn is not None:
         try:
             assert cbout[0].ndim == 2, "Callback output must be a 2D array"
             ref = callback(recipe.pre_filter(ref))
