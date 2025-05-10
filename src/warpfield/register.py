@@ -763,3 +763,15 @@ class Recipe(BaseModel):
             data = yaml.safe_load(f)
 
         return cls.model_validate(data)
+    
+    def to_yaml(self, yaml_path):
+        """Save the recipe to a YAML file
+
+        Args:
+            yaml_path (str): path to the YAML file
+        """
+        import yaml
+
+        with open(yaml_path, "w") as f:
+            yaml.dump(self.model_dump(), f)
+        print(f"Recipe saved to {yaml_path}")
