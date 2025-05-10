@@ -431,6 +431,46 @@ def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1
 
 
 def showvid(filename, width=600, embed=False, loop=True):
-    from IPython.display import Video
+    """
+    Display a video in a Jupyter notebook.
+    Args:
+        filename (str): Path to the video file.
+        width (int): Width of the video display.
+        embed (bool): Whether to embed the video in the notebook.
+        loop (bool): Whether to loop the video.
+    """
+    from IPython.display import Video, display
+
     html_attributes = "controls loop" if loop else "controls"
-    return Video(filename, embed=embed, width=width, html_attributes=html_attributes)
+    display(Video(filename, embed=embed, width=width, html_attributes=html_attributes))
+
+
+def show_gif(im0, im1, filename=None, zoom=[1, 1], fps=5):
+    """
+    Display an animated GIF of im0→im1.
+
+    If filename is None (the default), the GIF is kept in memory.
+    If filename is a string, the GIF is written to that file.
+    """
+    from IPython.display import Image, display
+
+    try:
+        import imageio
+    except ImportError:
+        raise ImportError(
+            "The 'imageio' and 'imageio-ffmpeg' packages are required to create videos. "
+            + "Please install them via 'conda install imageio imageio-ffmpeg'"
+        )
+
+    frames = [np.clip(im0 * 255, 0, 255).astype("uint8"), np.clip(im1 * 255, 0, 255).astype("uint8")]
+
+    if filename is None:
+        # write to in-memory buffer
+        buf = io.BytesIO()
+        imageio.mimsave(buf, frames, format="GIF", fps=fps, loop=0)
+        buf.seek(0)
+        display(Image(data=buf.getvalue(), format="gif"))
+    else:
+        # write to disk
+        imageio.mimsave(filename, frames, fps=fps, loop=0)
+        display(Image(filename=filename))
