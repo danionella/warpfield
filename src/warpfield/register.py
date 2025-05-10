@@ -619,7 +619,7 @@ class Smoother(BaseModel):
 
     sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
     shear: Union[float, None] = None
-    long_range_ratio: Union[float, None] = None
+    long_range_ratio: Union[float, None] = 0.05
 
     def __call__(self, xcorr_proj, block_size=None):
         """Apply a Gaussian filter to the cross-correlation data
