@@ -390,7 +390,7 @@ class RegistrationPyramid:
             ref_vol = self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask)
         self.mapper_ix = []
         for i in range(len(recipe.levels)):
-            if recipe.levels[i].repeat < 1:
+            if recipe.levels[i].repeats < 1:
                 continue
             block_size = np.array(recipe.levels[i].block_size)
             tmp = np.r_[ref_vol.shape] // -block_size
@@ -439,7 +439,7 @@ class RegistrationPyramid:
             )
         for k, mapper in enumerate(tqdm(self.mappers, desc=f"Levels", disable=not verbose)):
             for _ in tqdm(
-                range(self.recipe.levels[self.mapper_ix[k]].repeat), leave=False, desc=f"Repeats", disable=not verbose
+                range(self.recipe.levels[self.mapper_ix[k]].repeats), leave=False, desc=f"Repeats", disable=not verbose
             ):
                 wm = mapper.get_displacement(
                     vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
@@ -691,7 +691,7 @@ class LevelConfig(BaseModel):
     Args:
         block_size (list): shape of blocks, whose rigid displacement is estimated
         block_stride (list): stride (usually identical to block_size)
-        repeat (int): number of iterations for this level
+        repeats (int): number of iterations for this level (deisable level by setting repeats to 0)
         smooth (Smoother or None): Smoother object
         project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
         tukey_ref (float): if not None, apply a Tukey window to the reference volume (alpha = tukey_ref). Default is 0.5
@@ -706,7 +706,7 @@ class LevelConfig(BaseModel):
     smooth: Union[Smoother, None] = Smoother()
     affine: bool = False
     median_filter: bool = True
-    repeat: int = 5
+    repeats: int = 5
 
 
 class Recipe(BaseModel):
@@ -721,7 +721,7 @@ class Recipe(BaseModel):
     levels: List[LevelConfig] = [
         LevelConfig(
             block_size=[-4, -4, -4],
-            repeat=10,
+            repeats=10,
             affine=True,
             median_filter=False,
             smooth=Smoother(sigmas=[0.5, 0.5, 0.5]),

@@ -14,7 +14,7 @@ levels:
       sigmas: [0.5, 0.5, 0.5]
     median_filter: false
     affine: true
-    repeat: 10
+    repeats: 10
   # first non-affine level with intermediate block size
   - block_size: [64, 64, 64]
     project:
@@ -23,7 +23,7 @@ levels:
     smooth:
       sigmas: [2.0, 2.0, 2.0]
       long_range_ratio: 0.1
-    repeat: 5
+    repeats: 5
   # second non-affine level with small block size and even smaller stride (50% of block size)
   - block_size: [32, 32, 32]
     block_stride: 0.5
@@ -33,4 +33,4 @@ levels:
     smooth:
       sigmas: [4.0, 4.0, 4.0]
       long_range_ratio: 0.1
-    repeat: 5
+    repeats: 5
