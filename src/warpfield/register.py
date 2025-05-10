@@ -481,7 +481,7 @@ class RegistrationPyramid:
         return vol, warp_map, callback_output
 
 
-def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
+def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_path=None, vmax=None):
     """Register a volume to a reference volume using a registration pyramid.
 
     Args:
@@ -496,16 +496,26 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True):
         verbose (bool): If True, show progress bars. Default is True
 
     Returns:
-        - numpy.array or cupy.array: Registered volume
+        - numpy.array or cupy.array (depending on vol input): Registered volume
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
+    assert ref.shape == vol.shape, "Reference and volume shapes must be the same"
     recipe.model_validate(recipe.model_dump())
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
     del reg
     gc.collect()
     cp.fft.config.get_plan_cache().clear()
+
+    if video_path is not None:
+        try:
+            assert cbout[0].ndim == 2, "Callback output must be a 2D array"
+            ref = callback(recipe.pre_filter(ref))
+            vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
+            create_rgb_video(video_path, ref / vmax, np.array(cbout) / vmax, fps=10)
+        except (ValueError, AssertionError) as e:
+            warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
 
 
