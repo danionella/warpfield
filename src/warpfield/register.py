@@ -219,6 +219,26 @@ class WarpMap:
     def pull_coordinates(self, coords):
         return self.invert_fast().push_coordinates(coords, negative_shifts=True)
 
+    def jacobian_det(self, units_per_voxel=[1,1,1], edge_order=1):
+        """
+        Compute det J = det(∇φ) for φ(x)=x+u(x), using np.indices for the identity grid.
+        
+        Args:
+            edge_order : passed to np.gradient (1 or 2)
+
+        Returns:
+            detJ: cp.ndarray of shape spatial
+        """
+        scaling = cp.array(units_per_voxel, dtype="float32") * self.block_stride
+        coords = cp.indices(self.warp_field.shape[1:], dtype="float32") * scaling[:, None, None, None]
+        phi = coords + self.warp_field
+        J = cp.empty(self.warp_field.shape[1:] + (3, 3), dtype="float32")
+        for i in range(3):
+            grads = cp.gradient(phi[i], *scaling, edge_order=edge_order)
+            for j in range(3):
+                J[..., i, j] = grads[j]
+        return cp.linalg.det(J)
+
     def as_ants_image(self, voxel_size_um=1):
         """Convert to ANTsImage
 
