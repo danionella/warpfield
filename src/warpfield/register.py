@@ -444,6 +444,7 @@ class RegistrationPyramid:
                 wm = mapper.get_displacement(
                     vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
                 )
+                wm.warp_field *= self.recipe.levels[self.mapper_ix[k]].update_rate
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     wm = wm.median_filter()
                 if self.recipe.levels[self.mapper_ix[k]].affine:
@@ -697,6 +698,7 @@ class LevelConfig(BaseModel):
         tukey_ref (float): if not None, apply a Tukey window to the reference volume (alpha = tukey_ref). Default is 0.5
         affine (bool): if True, apply affine transformation to the displacement field
         median_filter (bool): if True, apply median filter to the displacement field
+        update_rate (float): update rate for the displacement field. Default is 1.0. Can be lowered to dampen oscillations.
     """
 
     block_size: Union[List[int]]
@@ -706,6 +708,7 @@ class LevelConfig(BaseModel):
     smooth: Union[Smoother, None] = Smoother()
     affine: bool = False
     median_filter: bool = True
+    update_rate: float = 1.0
     repeats: int = 5
 
 
