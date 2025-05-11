@@ -31,8 +31,14 @@ def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode="reflect"):
 
 def periodic_smooth_decomposition_nd_rfft(img):
     """
-    Decompose ND real images into periodic and smooth components using rfftn/irfftn.
-    Last two axes are treated as the image dimensions.
+    Decompose ND arrays of 2D images into periodic plus smooth components. This can help with edge artifacts in
+    Fourier transforms.
+
+    Args:
+        img (cupy.ndarray): input image or volume. The last two axes are treated as the image dimensions.
+
+    Returns:
+        cupy.ndarray: periodic component
     """
     # compute border-difference
     B = cp.zeros_like(img)
@@ -140,6 +146,9 @@ def accumarray(coords, shape, weights=None, clip=False):
         shape (tuple): shape of the output array
         weights (array_like): weights to be accumulated. If None, all weights are set to 1
         clip (bool): if True, clip coordinates to the shape of the output array, else ignore out-of-bounds coordinates. Default is False.
+
+    Returns:
+        accum (array_like): accumulated array of the given shape
     """
     assert coords.shape[0] == 3
     coords = np.round(coords.reshape(3, -1)).astype("int")
