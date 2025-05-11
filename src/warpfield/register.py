@@ -64,7 +64,7 @@ class WarpMap:
         return self.warp(vol, out=out)
 
     def pull_volume(self, vol, out=None):
-        """Alias of unwarp method"""
+        """Alias of warp method"""
         return self.warp(vol, out=out)
 
     def fit_affine(self, target=None):
