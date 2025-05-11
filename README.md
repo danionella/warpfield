@@ -223,7 +223,7 @@ recipe.levels[-1].repeats = 5
 > callback = warpfield.utils.mips_callback(units_per_voxel=units_per_voxel)
 > moving_reg, warpmap, _ = warpfield.register_volumes(fixed, moving, recipe, video_path=video_path, callback=callback)
 > ```
-> See also [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) documentation and [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb).
+> See also [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) documentation and [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb)  <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>.
 
 ## Feedback and contributions
 
