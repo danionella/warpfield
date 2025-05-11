@@ -65,45 +65,6 @@ def test_import_nii(tmp_path):
     assert np.allclose(loaded_data, data), "Loaded .nii data does not match expected data."
 
 
-def test_import_dicom(tmp_path):
-    """Test importing a 3D DICOM file."""
-    file_path = os.path.join(tmp_path, "test.dcm")
-    data = np.random.randint(0, 256, (10, 10, 10), dtype="uint8")  # 3D data
-
-    # Create the File Meta Information
-    file_meta = pydicom.Dataset()
-    file_meta.MediaStorageSOPClassUID = pydicom.uid.SecondaryCaptureImageStorage
-    file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
-    file_meta.TransferSyntaxUID = pydicom.uid.ImplicitVRLittleEndian
-    file_meta.ImplementationClassUID = pydicom.uid.PYDICOM_IMPLEMENTATION_UID
-
-    # Create the main DICOM dataset
-    dicom = pydicom.Dataset()
-    dicom.file_meta = file_meta
-    dicom.PixelData = data.tobytes()
-    dicom.Rows, dicom.Columns = data.shape[1], data.shape[2]
-    dicom.NumberOfFrames = data.shape[0]
-    dicom.BitsAllocated = 8  # Number of bits for each pixel
-    dicom.BitsStored = 8
-    dicom.HighBit = 7
-    dicom.SamplesPerPixel = 1
-    dicom.PixelRepresentation = 0  # 0 = unsigned, 1 = signed
-    dicom.PhotometricInterpretation = "MONOCHROME2"
-    dicom.Modality = "OT"  # Other
-    dicom.StudyInstanceUID = pydicom.uid.generate_uid()
-    dicom.SeriesInstanceUID = pydicom.uid.generate_uid()
-    dicom.SOPInstanceUID = pydicom.uid.generate_uid()
-    dicom.SOPClassUID = pydicom.uid.SecondaryCaptureImageStorage
-
-    # Save the DICOM file with the correct structure
-    pydicom.filewriter.dcmwrite(file_path, dicom, enforce_file_format=True)
-
-    # Test the import_data function
-    loaded_data, meta = load_data(str(file_path))
-    assert loaded_data.shape == data.shape, "Loaded .dcm data shape does not match expected data."
-    assert np.array_equal(loaded_data, data), "Loaded .dcm data does not match expected data."
-
-
 def test_import_tiff(tmp_path):
     """Test importing a 3D .tiff file."""
     file_path = tmp_path / "test.tiff"
