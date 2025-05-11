@@ -503,6 +503,8 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
             (note that `vol` is a 3D cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
             Callback outputs for each registration step will be returned as a list.
         verbose (bool): If True, show progress bars. Default is True
+        video_path (str): Save a video of the registration process, using callback outputs. The callback has to return 2D frames. Default is None.
+        vmax (float): Maximum pixel value (to scale video brightness). If none, set to 99.9 percentile of pixel values.
 
     Returns:
         - numpy.array or cupy.array (depending on vol input): Registered volume
@@ -523,63 +525,6 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
             ref = callback(recipe.pre_filter(ref))
             vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
             create_rgb_video(video_path, ref / vmax, np.array(cbout) / vmax, fps=10)
-        except (ValueError, AssertionError) as e:
-            warnings.warn(f"Video generation failed with error: {e}")
-    return registered_vol, warp_map, cbout
-
-
-def register_volumes_with_video(
-    ref,
-    vol,
-    recipe,
-    reg_mask=1,
-    callback=None,
-    verbose=True,
-    video_fn=None,
-    units_per_voxel=[1, 1, 1],
-    axes=[0, 1, 2],
-    vmax=None,
-    width=1024,
-):
-    """Register a volume to a reference volume using a registration pyramid (see `register_volumes`), and save a video of the registration process.
-
-    Args:
-        ref (numpy.array or cupy.array): Reference volume
-        vol (numpy.array or cupy.array): Volume to be registered
-        recipe (Recipe): Registration recipe
-        reg_mask (numpy.array): Mask to be multiplied with the reference volume. Default is 1 (no mask)
-        callback (function): Callback function to be called on the volume after each iteration. Default is None.
-            Can be used to monitor and optimize registration. Example: `callback = lambda vol: vol.mean(1).get()`
-            (note that `vol` is a 3D cupy array. Use `.get()` to turn the output into a numpy array and save GPU memory).
-            Callback outputs for each registration step will be returned as a list. If not provided, a default callback
-            creating maximum intensity projections will be used (`warpfield.utils.mips_callback`)
-        verbose (bool): If True, show progress bars. Default is True
-        video_fn (str): If not None and a callback function is provided, save the video of the registration process to this file. Default is None.
-            Note: this will only work if a callback function call returns a 2D numpy array. You will need to to install imageio and imageio-ffmpeg.
-            If video_fn is not None and no callback function is provided, a default callback function will be used that generates MIPs of the volume.
-        units_per_voxel (list): Units per voxel in the reference volume (e.g. µm or mm). Default is [1, 1, 1].
-        axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
-        vmax (float): Maximum pixel value (to scale video brightness). If none, set to 99.9 percentile of the reference volume.
-        width (int): Maximum width of the video in pixels. Defaults to 1024
-
-    Returns:
-        - numpy.array or cupy.array: Registered volume
-        - WarpMap: Displacement field
-        - list: List of outputs from the callback function
-    """
-
-    if video_fn is not None and callback is None:
-        if vmax is None:
-            vmax = cp.percentile(cp.array(ref, copy=False), 99.9).item()
-        callback = mips_callback(vmax=vmax, units_per_voxel=units_per_voxel, width=width, axes=axes)
-    registered_vol, warp_map, cbout = register_volumes(
-        ref, vol, recipe, reg_mask=reg_mask, callback=callback, verbose=verbose
-    )
-    if video_fn is not None:
-        try:
-            assert cbout[0].ndim == 2, "Callback output must be a 2D array"
-            ref = callback(recipe.pre_filter(ref))
-            create_rgb_video(video_fn, ref, np.array(cbout), fps=10)
         except (ValueError, AssertionError) as e:
             warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
