@@ -6,6 +6,7 @@ dependencies:
   - python>=3.9
   - pip
   - numpy
+  - scipy
   - pydantic
   - pyyaml
   - tqdm
@@ -15,6 +16,8 @@ dependencies:
   - h5py
   - hdf5plugin
   - nibabel
-  - pydicom
   - tifffile
-  - scipy
+# for videos:
+  - imageio
+  - imageio-ffmpeg
+  - scikit-image
