@@ -13,8 +13,17 @@ from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
 from .warp import unwarp_volume
-from .utils import accumarray, infill_nans, upsampled_dft_rfftn, sliding_block, create_rgb_video, mips_callback
-from .ndimage import dogfilter_gpu, gausskernel_sheared, ndwindow, periodic_smooth_decomposition_nd_rfft
+from .utils import create_rgb_video, mips_callback
+from .ndimage import (
+    accumarray,
+    dogfilter_gpu,
+    gausskernel_sheared,
+    infill_nans,
+    ndwindow,
+    periodic_smooth_decomposition_nd_rfft,
+    sliding_block,
+    upsampled_dft_rfftn,
+)
 
 ArrayType = Union[np.ndarray, cp.ndarray]
 
@@ -219,10 +228,10 @@ class WarpMap:
     def pull_coordinates(self, coords):
         return self.invert_fast().push_coordinates(coords, negative_shifts=True)
 
-    def jacobian_det(self, units_per_voxel=[1,1,1], edge_order=1):
+    def jacobian_det(self, units_per_voxel=[1, 1, 1], edge_order=1):
         """
         Compute det J = det(∇φ) for φ(x)=x+u(x), using np.indices for the identity grid.
-        
+
         Args:
             edge_order : passed to np.gradient (1 or 2)
 
@@ -530,7 +539,7 @@ def register_volumes_with_video(
     units_per_voxel=[1, 1, 1],
     axes=[0, 1, 2],
     vmax=None,
-    width=1024
+    width=1024,
 ):
     """Register a volume to a reference volume using a registration pyramid (see `register_volumes`), and save a video of the registration process.
 
@@ -776,7 +785,7 @@ class Recipe(BaseModel):
             data = yaml.safe_load(f)
 
         return cls.model_validate(data)
-    
+
     def to_yaml(self, yaml_path):
         """Save the recipe to a YAML file
 
