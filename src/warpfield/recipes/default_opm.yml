@@ -51,19 +51,6 @@ levels:
       sigmas: [4.0, 4.0, 4.0]
       long_range_ratio: 0.1
     repeats: 5
-  # # mixed (nicer on memory but probably worse)
-  # - block_size: [16, 8, 16]
-  #   block_stride: [16, 4, 16]
-  #   project:
-  #     low: 0.5
-  #     high: 2.0
-  #     normalize: 0
-  #     periodic_smooth: true
-  #   tukey_ref: 1.0
-  #   smooth:
-  #     sigmas: [4.0, 4.0, 4.0]
-  #     long_range_ratio: 0.2
-  #   repeats: 0
   # # wobble / shear level:
   # - block_size: [32, 8, 32] 
   #   block_stride: 0.5
