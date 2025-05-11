@@ -96,6 +96,9 @@ points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 ```
 
+> [!TIP]
+> You can test-tun warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
 ## Command-Line Interface (CLI)
 
 The `warpfield` library provides a command-line interface. This allows you to perform registration directly from the terminal without writing Python code.
@@ -108,7 +111,7 @@ python -m warpfield --fixed <fixed_image_path> --moving <moving_image_path> --re
 python -m warpfield --help
 ```
 
-> [!NOTE]  
+> [!IMPORTANT]  
 > Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution.
 
 #### Required Arguments
