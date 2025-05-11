@@ -2,7 +2,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![tests](https://github.com/danionella/warpfield/actions/workflows/test.yml/badge.svg)
 [![PyPI - Version](https://img.shields.io/pypi/v/warpfield)](https://pypi.org/project/warpfield/)
-[![Conda Version](https://img.shields.io/conda/v/danionella/warpfield)](https://anaconda.org/danionella/warpfield)
+[![Conda Version](https://img.shields.io/conda/v/conda-forge/warpfield)](https://anaconda.org/conda-forge/warpfield)
 ![GitHub last commit](https://img.shields.io/github/last-commit/danionella/warpfield)
 
 <img width="1000" src="https://github.com/user-attachments/assets/09b2109d-5db6-4f7e-8e3d-000361455a0f"/> <br>
@@ -43,11 +43,30 @@ The key steps are:
 
 ## Installation
 
-We recommend installing all dependencies with [conda/mamba](https://github.com/conda-forge/miniforge). Clone this repository, change into its root directory, then type:
+Using [conda/mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install):
 
 ```bash
-mamba env create -n warpfield -f environment.yml
-mamba activate warpfield
+conda install conda-forge::warpfield
+```
+
+Or, to install into a new conda environment (recommended):
+
+```bash
+conda create -n warpfield conda-forge::warpfield
+conda activate warpfield
+```
+
+Installation via pip is also possible, but not recommended (due to cuda dependencies):
+
+```bash
+pip install warpfield
+```
+
+For development, fork and clone the repository. Then type:
+
+```bash
+conda env create -n warpfield -f environment.yml
+conda activate warpfield
 pip install -e .
 ```
 
