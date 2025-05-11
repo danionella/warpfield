@@ -3,5 +3,5 @@
 """
 
 from . import register, utils
-from .register import register_volumes, Recipe, register_volumes_with_video
+from .register import register_volumes, Recipe
 from .utils import load_data
