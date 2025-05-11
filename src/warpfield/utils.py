@@ -259,7 +259,6 @@ def showvid(filename, width=600, embed=False, loop=True):
         raise ImportError(
             "The 'IPython' package is required to display videos. Please install it."
         )
-    if filename is None:
 
     html_attributes = "controls loop" if loop else "controls"
     display(Video(filename, embed=embed, width=width, html_attributes=html_attributes))
