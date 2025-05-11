@@ -12,7 +12,7 @@ import cupyx.scipy.ndimage
 from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
-from .warp import unwarp_volume
+from .warp import warp_volume
 from .utils import create_rgb_video, mips_callback
 from .ndimage import (
     accumarray,
@@ -45,7 +45,7 @@ class WarpMap:
         else:
             self.block_stride = cp.array(block_stride, dtype="float32")
 
-    def unwarp(self, vol, out=None):
+    def warp(self, vol, out=None):
         """Apply the warp to a volume
 
         Args:
@@ -54,14 +54,18 @@ class WarpMap:
         Returns:
             cupy.array: warped volume
         """
-        vol_out = unwarp_volume(
+        vol_out = warp_volume(
             vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
         )
         return vol_out
 
     def apply(self, vol, out=None):
+        """Alias of warp method"""
+        return self.warp(vol, out=out)
+
+    def pull_volume(self, vol, out=None):
         """Alias of unwarp method"""
-        return self.unwarp(vol, out=out)
+        return self.warp(vol, out=out)
 
     def fit_affine(self, target=None):
         """Fit affine transformation and return new fitted WarpMap
@@ -102,6 +106,11 @@ class WarpMap:
         return WarpMap(linfit, block_size, block_stride), coeff
 
     def median_filter(self):
+        """Apply median filter to the displacement field
+
+        Returns:
+            WarpMap: new WarpMap with median filtered displacement field
+        """
         warp_field = cupyx.scipy.ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
         return WarpMap(warp_field, self.block_size, self.block_stride)
 
@@ -141,14 +150,13 @@ class WarpMap:
         return WarpMap(dm_r, t_bsz, t_bst)
 
     def chain(self, target):
-        """
-        Chain displacement maps
+        """ Chain displacement maps
 
         Args:
             target (WarpMap): WarpMap to be added to existing map
 
         Returns:
-            WarpMap:
+            WarpMap: new WarpMap with chained displacement field
         """
         indices = cp.indices(target.warp_field.shape[1:])
         warp_field = self.warp_field.copy()
@@ -159,13 +167,13 @@ class WarpMap:
         return WarpMap(warp_field, target.block_size, target.block_stride)
 
     def invert(self, method="linear"):
-        """Invert the displacement field
+        """ Invert the displacement field
 
         Args:
             method (str): interpolation method. 'linear' (default) or 'nearest'
 
         Returns:
-            WarpMap:
+            WarpMap: inverted WarpMap
         """
         warp_field = self.warp_field.get()
         block_size = self.block_size.get()
@@ -188,7 +196,7 @@ class WarpMap:
         """Invert the displacement field using accumulation and Gaussian basis interpolation.
 
         Returns:
-            WarpMap:
+            WarpMap: inverted WarpMap
         """
         warp_field = self.warp_field.get()
         inv_field = np.zeros_like(warp_field)
@@ -480,11 +488,11 @@ class RegistrationPyramid:
                     warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
                 else:
                     warp_map = warp_map.chain(wm)
-                warp_map.unwarp(vol_tmp0, out=vol_tmp)
+                warp_map.warp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
                     # callback_output.append(callback(warp_map.unwarp(vol)))
                     callback_output.append(callback(vol_tmp))
-        vol = warp_map.unwarp(vol)
+        vol = warp_map.warp(vol)
         if was_numpy:
             vol = vol.get()
         return vol, warp_map, callback_output

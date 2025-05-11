@@ -2,7 +2,7 @@ import numpy as np
 import cupy as cp
 
 
-_unwarp_volume_kernel = cp.RawKernel(
+_warp_volume_kernel = cp.RawKernel(
     r"""
 
 __device__ int ravel3d(const int * shape, const int i, const int j, const int k){
@@ -34,7 +34,7 @@ __device__ float trilinear_nearest(const float * arr, const int * arr_shape, flo
     return c;
 }
 
-extern "C" __global__ void unwarp_volume_kernel(const float * arr, const int * arr_shape, const float * disp_field0, const float * disp_field1, const float * disp_field2, const int * disp_field_shape, const float * disp_scale, const float * disp_offset, float * out, const int * out_shape) {
+extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr_shape, const float * disp_field0, const float * disp_field1, const float * disp_field2, const int * disp_field_shape, const float * disp_scale, const float * disp_offset, float * out, const int * out_shape) {
     float x,y,z,d0,d1,d2;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < out_shape[0]; i += blockDim.x * gridDim.x) {
         for (int j = blockIdx.y * blockDim.y + threadIdx.y; j < out_shape[1]; j += blockDim.y * gridDim.y) {
@@ -52,31 +52,31 @@ extern "C" __global__ void unwarp_volume_kernel(const float * arr, const int * a
     }
 }
 """,
-    "unwarp_volume_kernel",
+    "warp_volume_kernel",
 )
 
 
-def unwarp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8]):
-    """Unwarp a 3D volume using a displacement field (calling a CUDA kernel).
+def warp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8]):
+    """Warp a 3D volume using a displacement field (calling a CUDA kernel).
 
     This function applies a displacement field, typically obtained from a
-    registration algorithm, to unwarp a 3D volume. The displacement field
+    registration algorithm, to warp a 3D volume. The displacement field
     is a 4D array of shape (3, x, y, z), where the first dimension corresponds
     to the x, y, and z displacements. It defines, for each voxel in the target
     volume, the source location in the warped volume.
 
     Args:
-        vol (array_like): 3D input array (x-y-z) to be unwarped.
+        vol (array_like): 3D input array (x-y-z) to be warped.
         disp_field (array_like): 4D array (3-x-y-z) of displacements along x, y, z.
         disp_scale (array_like): Scaling factors for the displacement field.
         disp_offset (array_like): Offset values for the displacement field.
-        out (array_like, optional): Output array to store the unwarped volume.
+        out (array_like, optional): Output array to store the warped volume.
             If None, a new array is created.
         tpb (list, optional): Threads per block for CUDA kernel execution.
             Defaults to [8, 8, 8].
 
     Returns:
-        array_like: Unwarped 3D volume.
+        array_like: Warped 3D volume.
     """
     was_numpy = isinstance(vol, np.ndarray)
     vol = cp.array(vol, dtype="float32", copy=False, order="C")
@@ -84,7 +84,7 @@ def unwarp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8,
         out = cp.zeros(vol.shape, dtype=vol.dtype)
     assert out.dtype == cp.dtype("float32")
     bpg = np.ceil(np.array(out.shape) / tpb).astype("int").tolist()  # blocks per grid
-    _unwarp_volume_kernel(
+    _warp_volume_kernel(
         tuple(bpg),
         tuple(tpb),
         (

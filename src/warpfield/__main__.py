@@ -51,7 +51,7 @@ def main():
         logging.info("Inverting the warp map...")
         warp_map_inv = warp_map.invert_fast()
         logging.info("Registering the fixed image to the moving image...")
-        fixed_reg_inv = warp_map_inv.unwarp(moving_image)
+        fixed_reg_inv = warp_map_inv.apply(moving_image)
 
     # save
     # consider args.invert when logging and reporting fixed_reg_inv:
