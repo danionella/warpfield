@@ -217,13 +217,14 @@ recipe.levels[-1].repeats = 5
 > The speed of `warpfield` enables rapid iterative optimization of the registration process. Start with a simple recipe, such as the one above. Deactivate all levels, except for the first affine level, by setting their `repeats` to 0. Confirm that the affine registration converged (increasing repeats should not change the result) and move on to the second level. If voxels are anisotropic, adjust `block_size` to make blocks more or less isotropic in real space. Inspect results as you change the settings and repeats of the second level, then add more fine-grained levels if necessary. Adjust `project.low` and `project.high` to the relevant feature size if needed (which may get smaller in finer levels). If the moving volume warps too much, consider larger blocks / fewer levels. Otherwise, increase `smooth.sigmas`, reduce repeats, or reduce `block_stride` to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes), [`register_volumes_with_video`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes_with_video) and tip below) to observe each level and repeats of the registration process. It is very helpful for troubleshooting and for reducing compute time by adjusting the levels and repeats to the necessary minimum.
 
 > [!TIP]
-> Generating videos of the registration process (you will need to `conda install imageio imageio-ffmpeg`):
+> Generating videos of the registration process (you will need to `conda install imageio imageio-ffmpeg scikit-image`):
 > ```python
-> video_fn = "registration.mp4"
-> units_per_voxel = [2,3,4] # voxel aspect ratio or physical dimensions (e.g. µm)
-> vol_mov_reg, warp_map, _ = warpfield.register_volumes_with_video(vol_ref, vol_mov, recipe, video_fn=video_fn, units_per_voxel=units_per_voxel)
+> video_path = "output.mp4" 
+> units_per_voxel = [1,1,1] # voxel aspect ratio or physical dimensions (e.g. µm)
+> callback = warpfield.utils.mips_callback(units_per_voxel=units_per_voxel)
+> moving_reg, warpmap, _ = warpfield.register_volumes(fixed, moving, recipe, video_path=video_path, callback=callback)
 > ```
-> See [`register_volumes_with_video`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes_with_video) documentation.
+> See also [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) documentation and [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb).
 
 ## Feedback and contributions
 
