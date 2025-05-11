@@ -9,7 +9,6 @@ import pytest
 import numpy as np
 import h5py
 import nibabel as nib
-import pydicom
 import tifffile
 
 import warpfield
