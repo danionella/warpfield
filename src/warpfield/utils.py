@@ -46,7 +46,7 @@ def load_data(file_path: str):
         except ImportError:
             raise ImportError("The 'nibabel' package is required to load NIfTI files. Please install it.")
         warnings.warn(
-            "The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
+            "The NIfTI loader ignores scale and offset. Please ensure that fixed and moving volumes are at the same scale and orientation."
         )
         nii = nib.load(file_path)
         data = np.asanyarray(nii.get_fdata(), order="C").astype("float32")
@@ -68,7 +68,7 @@ def load_data(file_path: str):
         except ImportError:
             raise ImportError("The 'pydicom' package is required to load DICOM files. Please install it.")
         warnings.warn(
-            "The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are in the same scale and orientation."
+            "The DICOM loader ignores scale and offset. Please ensure that fixed and moving volumes are at the same scale and orientation."
         )
         dicom = pydicom.dcmread(file_path)
         data = dicom.pixel_array
@@ -82,7 +82,6 @@ def load_data(file_path: str):
 
     elif ".mat:" in file_path:
         from scipy.io import loadmat
-
         file_path, variable_name = file_path.split(":", 1)
         mat_data = loadmat(file_path)
         if variable_name not in mat_data:
