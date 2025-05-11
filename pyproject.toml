@@ -33,6 +33,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/danionella/warpfield"
+Documentation = "https://danionella.github.io/warpfield/"
+
+[project.scripts]
+warpfield = "warpfield.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
