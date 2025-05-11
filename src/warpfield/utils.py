@@ -123,8 +123,10 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
 
     vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
-
-    imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
+    try: 
+        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
+    except Exception:
+        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
 
 
 def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
