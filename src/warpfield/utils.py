@@ -116,7 +116,8 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
 
     rgb = np.zeros((*moving.shape, 3), dtype="float32")
     rgb[..., 0] = reference[None]
-    rgb[..., 1] = moving * 0.8
+    rgb[..., 1] = moving
+    rgb[..., 2] = moving * 0.5 + reference[None] * 0.5
 
     # clip to shape divisible by 2
     rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
