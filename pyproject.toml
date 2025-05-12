@@ -42,6 +42,9 @@ warpfield = "warpfield.__main__:main"
 where = ["src"]
 include = ["warpfield*"]
 
+[tool.setuptools.package-data]
+warpfield = ["recipes/*.yml"]
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 
