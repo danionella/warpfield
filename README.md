@@ -189,12 +189,12 @@ recipe.pre_filter.clip_thresh=10
 Alternatively, you can define a recipe from scratch using the `Recipe` class. For example:
 
 ```python
-# create a basic recipe with one affine registration level and a default pre-filter:
-recipe = warpfield.Recipe()
+# create a basic recipe:
+recipe = warpfield.Recipe() # initialized with a translation level, followed by an affine registration level
 recipe.pre_filter.clip_thresh = 0 # clip DC background, if present
 
 # affine level properties
-recipe.levels[0].repeats = 5
+recipe.levels[-1].repeats = 5
 
 # add non-rigid registration levels:
 recipe.add_level(block_size=[128,128,128])

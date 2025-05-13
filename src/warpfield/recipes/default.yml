@@ -5,7 +5,10 @@ pre_filter:
   low: 0.5
   high: 10.0
 levels:
-  # affine level with largest possible blocks. Maybe adjust projector low/high sigma
+  # simple translation (don't change):
+  - block_size: [-1, -1, -1] 
+    repeats: 1
+  # affine level with largest possible blocks (adjust repeats and possibly project low/high):
   - block_size: [-4, -4, -4] # need at least 4 blocks along each axis for affine fit
     project:
       low: 2.0
@@ -14,8 +17,8 @@ levels:
       sigmas: [0.5, 0.5, 0.5]
     median_filter: false
     affine: true
-    repeats: 10
-  # first non-affine level with intermediate block size
+    repeats: 10 # affine levels cannot overfit, have sufficient repeats to converge
+  # first non-affine level with intermediate block size:
   - block_size: [64, 64, 64]
     project:
       low: 2.0

@@ -694,7 +694,11 @@ class Recipe(BaseModel):
 
     pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
-        LevelConfig(
+        LevelConfig( # translation level
+            block_size=[-1, -1, -1],
+            repeats=1,
+        ),
+        LevelConfig( # affine level
             block_size=[-4, -4, -4],
             repeats=10,
             affine=True,
@@ -715,6 +719,20 @@ class Recipe(BaseModel):
         if len(block_size) != 3:
             raise ValueError("block_size must be a list of 3 integers")
         self.levels.append(LevelConfig(block_size=block_size, **kwargs))
+
+    def insert_level(self, index, block_size, **kwargs):
+        """Insert a level to the registration recipe
+
+        Args:
+            index (int): A number specifying in which position to insert the level
+            block_size (list): shape of blocks, whose rigid displacement is estimated
+            **kwargs: additional arguments for LevelConfig
+        """
+        if isinstance(block_size, (int, float)):
+            block_size = [block_size] * 3
+        if len(block_size) != 3:
+            raise ValueError("block_size must be a list of 3 integers")
+        self.levels.insert(index, LevelConfig(block_size=block_size, **kwargs))
 
     @classmethod
     def from_yaml(cls, yaml_path):
