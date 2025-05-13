@@ -75,8 +75,8 @@ pip install --no-deps -e .
 import warpfield 
 
 # 1. Load data (note: the two volumes are expected to be of the same array shape and resolution)
-vol_ref = np.load("reference_volume.npy")
-vol_mov = np.load("moving_volume.npy")
+vol_ref, _ = warpfield.load_data("reference_volume.npy")
+vol_mov, _ = warpfield.load_data("moving_volume.npy")
 
 # 2. Choose registration recipe (here: loaded from a YAML file. See below for alternatives)
 recipe = warpfield.Recipe.from_yaml('default.yml')
