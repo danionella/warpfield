@@ -54,7 +54,7 @@ Or, to install into a new conda environment (recommended):
 ```bash
 conda create -n warpfield conda-forge::warpfield
 conda activate warpfield
-```
+``` 
 
 Installation via pip is also possible (but you need to separately ensure [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) 12.x is installed):
 
