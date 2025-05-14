@@ -99,8 +99,11 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 > [!TIP]
 > You can test-run warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
-> [!TIP]
-> If the moving volume is not already at the same array shape as the fixed volume, you can use the GPU-accelerated convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#warpfield.ndimage.zoom_chop_pad) to resize it.
+> [!IMPORTANT]
+> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution. If the moving volume does not already have the same array shape as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#warpfield.ndimage.zoom_chop_pad) to resize it (requires `warpfield` version 0.0.6). Example:
+> ```python
+> vol_mov_resized = zoom_chop_pad(vol_mov, target_shape=vol_ref.shape, scale=(1,1,1), soft_edge=(20,20,20))
+> ```
 
 ## Command-Line Interface (CLI)
 
@@ -110,12 +113,10 @@ The `warpfield` library provides a command-line interface. This allows you to pe
 
 ```bash
 python -m warpfield --fixed <fixed_image_path> --moving <moving_image_path> --recipe <recipe_path> [options]
-# You can use the `--help` flag to see detailed instructions for the CLI:
+# Remember that the two volumes in the input files have to have the same array shape.
+# You can use the `--help` flag to see instructions for the CLI:
 python -m warpfield --help
 ```
-
-> [!IMPORTANT]  
-> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution.
 
 #### Required Arguments
 
