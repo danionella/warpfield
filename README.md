@@ -100,7 +100,7 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 > You can test-run warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 > [!IMPORTANT]
-> Physical units, scalings or other metadata that may be present in data files are ignored. Fixed and moving volumes are expected to be of the same shape and resolution. If the moving volume does not already have the same array shape as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom_chop_pad) to resize it (`warpfield` version 0.0.6+). Example:
+> Fixed and moving volumes are expected to be of the same shape and approximate resolution. Physical units, scalings or other metadata that may be present in data files are ignored. If the moving volume does not already have the same array shape as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom_chop_pad) to resize it (`warpfield` version 0.0.6+). Example:
 > ```python
 > vol_mov_resized = zoom_chop_pad(vol_mov, target_shape=vol_ref.shape, scale=(1,1,1), soft_edge=(20,20,20))
 > ```
