@@ -4,7 +4,7 @@ import cupyx
 import scipy.ndimage
 
 
-def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode="reflect"):
+def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect"):
     """Diffference of Gaussians filter
 
     Args:

@@ -9,14 +9,14 @@ import scipy.signal
 import cupy as cp
 import cupyx
 import cupyx.scipy.ndimage
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError 
 from tqdm.auto import tqdm
 
 from .warp import warp_volume
 from .utils import create_rgb_video, mips_callback
 from .ndimage import (
     accumarray,
-    dogfilter_gpu,
+    dogfilter,
     gausskernel_sheared,
     infill_nans,
     ndwindow,
@@ -574,7 +574,7 @@ class Projector(BaseModel):
             out = periodic_smooth_decomposition_nd_rfft(out)
         if self.dog:
             sigmas = np.r_[0, 0, 0, 1, 1]
-            out = dogfilter_gpu(out, sigmas * self.low, sigmas * self.high, mode="reflect")
+            out = dogfilter(out, sigmas * self.low, sigmas * self.high, mode="reflect")
         if self.normalize > 0:
             out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         return out
@@ -654,7 +654,7 @@ class RegFilter(BaseModel):
         if reg_mask is not None:
             vol *= cp.array(reg_mask, dtype="float32", copy=False)
         if self.dog:
-            vol = dogfilter_gpu(vol, self.low, self.high, mode="reflect")
+            vol = dogfilter(vol, self.low, self.high, mode="reflect")
         return vol
 
 
