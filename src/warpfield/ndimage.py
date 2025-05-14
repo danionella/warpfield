@@ -1,10 +1,13 @@
+import cupyx.scipy.signal.windows
 import numpy as np
 import cupy as cp
 import cupyx
 import scipy.ndimage
+import cupyx.scipy.ndimage
+import cupyx.scipy.signal
 
 
-def dogfilter_gpu(vol, sigma_low=1, sigma_high=4, mode="reflect"):
+def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect"):
     """Diffference of Gaussians filter
 
     Args:
@@ -53,8 +56,8 @@ def periodic_smooth_decomposition_nd_rfft(img):
 
     # build denom for full grid then slice to half-spectrum
     M, N = img.shape[-2:]
-    q = cp.arange(M, dtype='float32').reshape(M, 1)
-    r = cp.arange(N, dtype='float32').reshape(1, N)
+    q = cp.arange(M, dtype="float32").reshape(M, 1)
+    r = cp.arange(N, dtype="float32").reshape(1, N)
     denom_full = 2 * cp.cos(2 * np.pi * q / M) + 2 * cp.cos(2 * np.pi * r / N) - 4
     # take only first N//2+1 columns
     denom_half = denom_full[:, : (N // 2 + 1)]
@@ -272,6 +275,83 @@ def upsampled_dft_rfftn(
     patch = cp.einsum("b m N, b n N -> b m n", out1, kx)
 
     return patch.real.reshape(*batch_shape, m, n)
+
+
+def zoom_chop_pad(
+    arr, target_shape=None, scale=(1, 1, 1), soft_edge=(0, 0, 0), shift=(0, 0, 0), flip=(False, False, False), cval=0
+):
+    """Zooms, softens, flips, shifts, and pads/crops a 3D array to match the target shape.
+
+    The conceptual order is as follows: zoom, soften, flip, shift, crop/pad.
+
+    Args:
+        arr (np.ndarray or cp.ndarray): The input array to be transformed
+        target_shape (tuple of int): The desired target shape to pad/crop to. Defaults to the shape of the input array.
+        scale (tuple): Zoom factors for each axis. Default: (1, 1, 1).
+        soft_edge (tuple of int): The size of the soft edge (Tukey envelope) to be applied to the input array, in voxels. Default: (0, 0, 0).
+        shift (tuple): Shifts for each axis, in voxels. Default: (0, 0, 0).
+        flip (tuple of bool): Whether to flip each axis. Default: (False, False, False).
+        cval (int, float): The value to use for padding. Default: 0.
+
+    Returns:
+        np.ndarray or cp.ndarray: The transformed array. Dtype is float32.
+    """
+
+    was_numpy = isinstance(arr, np.ndarray)
+
+    if target_shape is None:
+        target_shape = arr.shape
+
+    if any(s > 0 for s in soft_edge):
+        arr = cp.array(arr, dtype="float32", copy=True, order="C")
+        scaled_edge = np.array(soft_edge) / np.array(scale)
+        arr = soften_edges(arr, soft_edge=scaled_edge, copy=False)
+    else:
+        arr = cp.array(arr, dtype="float32", copy=False, order="C")
+
+    coords = cp.indices(target_shape, dtype=cp.float32)
+    for i in range(len(coords)):
+        coords[i] -= target_shape[i] / 2
+        coords[i] /= scale[i]
+        coords[i] += arr.shape[i] / 2
+        if flip[i]:
+            coords[i] *= -1
+            coords[i] += arr.shape[i] - 1
+        coords[i] -= shift[i]
+    result = cupyx.scipy.ndimage.map_coordinates(arr, coords, order=1, mode="constant", cval=cval)
+
+    if was_numpy:
+        result = result.get()
+    return result
+
+
+def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
+    """Apply a soft Tukey edge to the input array.
+
+    Args:
+        arr (np.ndarray or cp.ndarray): The input array
+        soft_edge (tuple of int): The size of the soft edge (Tukey envelope) to be applied to the input array, in voxels. Default: (0, 0, 0).
+        copy (bool): If True, a copy of the array is made. Default: True.
+
+    Returns:
+        np.ndarray or cp.ndarray: The transformed array. Dtype is float32.
+    """
+    was_numpy = isinstance(arr, np.ndarray)
+    input_dtype = arr.dtype
+    arr = cp.array(arr, dtype="float32", copy=copy)
+
+    if any(s > 0 for s in soft_edge):
+        for i in range(arr.ndim):
+            if soft_edge[i] > 0:
+                alpha = 2 * soft_edge[i] / arr.shape[i]
+                alpha = np.clip(alpha, 0, 1)
+                win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
+                arr *= cp.moveaxis(win[:, None, None], 0, i)
+
+    arr = arr.astype(input_dtype, copy=False)
+    if was_numpy:
+        arr = arr.get()
+    return arr
 
 
 def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
