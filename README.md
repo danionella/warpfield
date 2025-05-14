@@ -99,6 +99,9 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 > [!TIP]
 > You can test-run warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
+> [!TIP]
+> If the moving volume is not already at the same array shape as the fixed volume, you can use the GPU-accelerated convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#warpfield.ndimage.zoom_chop_pad) to resize it.
+
 ## Command-Line Interface (CLI)
 
 The `warpfield` library provides a command-line interface. This allows you to perform registration directly from the terminal without writing Python code.
