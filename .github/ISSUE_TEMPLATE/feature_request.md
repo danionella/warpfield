@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-**Is your feature request related to a problem or limitation?.**
+**Describe the problem or limitation**
 A clear and concise description of what the problem is.
 
 **Describe the solution you'd like**
