@@ -100,11 +100,15 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 > You can test-run warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 > [!IMPORTANT]
-> Fixed and moving volumes are expected to be of the same array shape and voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
+> Fixed and moving volumes are expected to be of the same voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
 >
-> If the moving volume does not already have the same shape and approximate resolution as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom_chop_pad`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom_chop_pad) to match shape and scale (`warpfield` version 0.0.6+). It also softens edges before padding, to reduce the chance that edges will create artificial features. Example:
+> If the moving volume does not already have the same resolution as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom) to match scale. 
+> 
+> Also note that hard edges can create feature that cause registration artifacts. It is best to have the entire object within the volume and edge voxel values close to zero. If this is not the case, you can use [`warpfield.ndimage.soft_edge`](https://danionella.github.io/warpfield/warpfield/ndimage.html#soft_edge) to create a soft edge around the volume. Example pre-processing code:
+> 
 > ```python
-> vol_mov_resized = zoom_chop_pad(vol_mov, target_shape=vol_ref.shape, scale=(1,1,1), soft_edge=(20,20,20))
+> vol_mov = zoom(vol_mov, zoom_factors = voxel_size_moving/voxel_size_fixed) 
+> vol_mov = soft_edge(vol_mov, (10,10,10)) # soft edge in voxels
 > ```
 
 ## Command-Line Interface (CLI)
