@@ -403,7 +403,6 @@ class RegistrationPyramid:
         self.reg_mask = cp.array(reg_mask, dtype="float32", copy=False, order="C")
         self.mappers = []
         ref_vol = cp.array(ref_vol, dtype="float32", copy=False, order="C")
-        self.ref_shape = ref_vol.shape
         if self.recipe.pre_filter is not None:
             ref_vol = self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask)
         self.mapper_ix = []
@@ -443,14 +442,10 @@ class RegistrationPyramid:
         """
         was_numpy = isinstance(vol, np.ndarray)
         vol = cp.array(vol, "float32", copy=False, order="C")
-        # warp_map = None
-        offsets = (cp.array(vol.shape) - cp.array(self.ref_shape))/2
-        warp_map = WarpMap(offsets[:,None,None,None], cp.ones(3), cp.ones(3)).resize_to(self.mappers[-1])
+        warp_map = None
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
-        # vol_tmp = vol_tmp0.copy()
-        vol_tmp = cp.zeros(self.ref_shape, dtype="float32", order="C")
-        warp_map.warp(vol_tmp0, out=vol_tmp)
+        vol_tmp = vol_tmp0.copy()
         min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
         if callback is not None:
             callback_output.append(callback(vol_tmp))
@@ -489,20 +484,18 @@ class RegistrationPyramid:
                 else:
                     wm = wm.resize_to(self.mappers[-1])
 
-                # if warp_map is None:
-                #     warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
-                # else:
-                #     warp_map = warp_map.chain(wm)
-                warp_map = warp_map.chain(wm)
+                if warp_map is None:
+                    warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
+                else:
+                    warp_map = warp_map.chain(wm)
                 warp_map.warp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
                     # callback_output.append(callback(warp_map.unwarp(vol)))
                     callback_output.append(callback(vol_tmp))
-        # vol = warp_map.warp(vol)
-        warp_map.warp(vol, out=vol_tmp)
+        vol = warp_map.warp(vol)
         if was_numpy:
-            vol_tmp = vol_tmp.get()
-        return vol_tmp, warp_map, callback_output
+            vol = vol.get()
+        return vol, warp_map, callback_output
 
 
 def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_path=None, vmax=None):
@@ -526,7 +519,7 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    #assert ref.shape == vol.shape, "Reference and volume shapes must be the same"
+    assert ref.shape == vol.shape, "Reference and volume shapes must be the same"
     recipe.model_validate(recipe.model_dump())
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
