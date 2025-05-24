@@ -354,9 +354,26 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
     return arr
 
 
-def match_volumes(
-    fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0, 0), cval=0, res_method="fixed"
-):
+def zoom(arr, zoom_factors, order=1, mode="constant"):
+    """Zooms an array by given factors along each axis.
+
+    Args:
+        arr (np.ndarray or cp.ndarray): The input array to be zoomed.
+        zoom_factors (tuple of float): Zoom factors for each axis.
+        order (int): The order of the spline interpolation. Default is 1 (linear).
+
+    Returns:
+        np.ndarray or cp.ndarray: The zoomed array.
+    """
+    was_numpy = isinstance(arr, np.ndarray)
+    arr = cp.array(arr, dtype="float32", copy=False, order="C")
+    out = cupyx.scipy.ndimage.zoom(arr, zoom_factors, order=order)
+    if was_numpy:
+        out = out.get()
+    return out
+
+
+def match_volumes(fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0, 0), cval=0, res_method="fixed"):
     """
     Rescale and pad the fixed and moving volumes so both have the same physical size and resolution.
 
