@@ -354,6 +354,73 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
     return arr
 
 
+def match_volumes(
+    fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0, 0), cval=0, res_method="fixed"
+):
+    """
+    Rescale and pad the fixed and moving volumes so both have the same physical size and resolution.
+
+    Args:
+        fixed (ndarray): Fixed/reference volume.
+        fixed_res (tuple): Pixel size (resolution) for fixed, in physical units.
+        moving (ndarray): Moving volume.
+        moving_res (tuple): Pixel size (resolution) for moving, in physical units.
+        order (int): Interpolation order for zooming.
+        soft_edge (tuple): Soft edge parameter for padding.
+        cval (float): Constant value for padding.
+        res_method (str): How to choose the target resolution.
+            "fixed" (default): use fixed_res,
+            "min": use the finest (smallest) resolution,
+            "max": use the coarsest (largest) resolution,
+            "mean": use the mean of fixed_res and moving_res.
+
+    Returns:
+        fixed_out (ndarray): The fixed volume, rescaled and padded to the target resolution and physical size.
+        moving_out (ndarray): The moving volume, rescaled and padded to the target resolution and physical size.
+        target_res (tuple): The target resolution used for both volumes.
+    """
+    fixed_res = np.array(fixed_res)
+    moving_res = np.array(moving_res)
+    fixed_shape = np.array(fixed.shape)
+    moving_shape = np.array(moving.shape)
+
+    # Compute physical sizes
+    fixed_phys = fixed_shape * fixed_res
+    moving_phys = moving_shape * moving_res
+
+    # Target: match the larger physical size along each axis
+    target_phys = np.maximum(fixed_phys, moving_phys)
+
+    # Determine target resolution
+    if res_method == "fixed":
+        target_res = fixed_res
+    elif res_method == "min":
+        target_res = np.minimum(fixed_res, moving_res)
+    elif res_method == "max":
+        target_res = np.maximum(fixed_res, moving_res)
+    elif res_method == "mean":
+        target_res = (fixed_res + moving_res) / 2
+    else:
+        raise ValueError(f"Unknown target_res_type: {res_method}")
+
+    # Compute the target shape
+    target_shape = np.ceil(target_phys / target_res).astype(int)
+
+    # Rescale fixed
+    scale_fixed = fixed_res / target_res
+    fixed_out = zoom_chop_pad(
+        fixed, target_shape=target_shape, scale=scale_fixed, soft_edge=soft_edge, cval=cval, order=order
+    )
+
+    # Rescale moving
+    scale_moving = moving_res / target_res
+    moving_out = zoom_chop_pad(
+        moving, target_shape=target_shape, scale=scale_moving, soft_edge=soft_edge, cval=cval, order=order
+    )
+
+    return fixed_out, moving_out, tuple(target_res)
+
+
 def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
     """Richardson-Lucy deconvolution (regular and blind)
 
