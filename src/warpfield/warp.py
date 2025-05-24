@@ -10,6 +10,7 @@ __device__ int ravel3d(const int * shape, const int i, const int j, const int k)
 }
 
 __device__ float trilinear_nearest(const float * arr, const int * arr_shape, float x, float y, float z){
+    // Trilinear interpolation for 3D arrays. If the coordinates are out of bounds, clamp them to the nearest valid index.
     x = fminf(fmaxf(x,0.0f), (float)arr_shape[0]-1.001);
     y = fminf(fmaxf(y,0.0f), (float)arr_shape[1]-1.001);
     z = fminf(fmaxf(z,0.0f), (float)arr_shape[2]-1.001);
@@ -34,6 +35,15 @@ __device__ float trilinear_nearest(const float * arr, const int * arr_shape, flo
     return c;
 }
 
+__device__ float trilinear_fill(const float * arr, const int * arr_shape, float x, float y, float z){
+    // If the coordinates are out of bounds, return 0.0f. Otherwise, use trilinear interpolation.
+    if (x < 0.0f || x > arr_shape[0] - 1.001f ||
+        y < 0.0f || y > arr_shape[1] - 1.001f ||
+        z < 0.0f || z > arr_shape[2] - 1.001f)
+        return 0.0f;  
+    return trilinear_nearest(arr, arr_shape, x, y, z);
+}
+
 extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr_shape, const float * disp_field0, const float * disp_field1, const float * disp_field2, const int * disp_field_shape, const float * disp_scale, const float * disp_offset, float * out, const int * out_shape) {
     float x,y,z,d0,d1,d2;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < out_shape[0]; i += blockDim.x * gridDim.x) {
@@ -46,7 +56,8 @@ extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr
                 d1 = trilinear_nearest(disp_field1, disp_field_shape, x, y, z);
                 d2 = trilinear_nearest(disp_field2, disp_field_shape, x, y, z);
                 int idx = ravel3d(out_shape, i,j,k);
-                out[idx] = trilinear_nearest(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2);
+                //out[idx] = trilinear_nearest(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2);
+                out[idx] = trilinear_fill(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2);
             }
         }
     }
