@@ -33,7 +33,7 @@ jobs:
       - name: Install pdoc
         run: |
           conda activate docs
-          conda install pdoc
+          pip install pdoc
       - name: Run pdoc
         run: |
           conda activate docs
