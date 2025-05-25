@@ -156,7 +156,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True.                 |
 | `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5           |
 | `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
-| `soft_edge`      | Fade the borders of the volumes to 0 (black). Reduces edge effects for volumes in which the sample reaches up to or is clipped by the volume border. Float or list of 3 floats indicating the extent of the fade in voxels from the border. Defaults to 20.0.|
+| `soft_edge`      | Fade the borders of the volumes to 0 (black). Reduces edge effects for volumes in which the sample extends to the volume border or beyond. Float or list of 3 floats (for each axis): size of the fade in voxels from each border. If required, the fade should be larger than σ<sub>high</sub> (above). Defaults to 0.0 (disabled).|
 
 | Level parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
