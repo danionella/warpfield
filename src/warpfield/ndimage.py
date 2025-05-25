@@ -339,14 +339,16 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
     was_numpy = isinstance(arr, np.ndarray)
     input_dtype = arr.dtype
     arr = cp.array(arr, dtype="float32", copy=copy)
+    if isinstance(soft_edge, int) or isinstance(soft_edge, float):
+        soft_edge = (soft_edge,) * arr.ndim
+    soft_edge = np.clip(soft_edge, 0, np.array(arr.shape) / 2)
 
-    if any(s > 0 for s in soft_edge):
-        for i in range(arr.ndim):
-            if soft_edge[i] > 0:
-                alpha = 2 * soft_edge[i] / arr.shape[i]
-                alpha = np.clip(alpha, 0, 1)
-                win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
-                arr *= cp.moveaxis(win[:, None, None], 0, i)
+    for i in range(arr.ndim):
+        if soft_edge[i] > 0:
+            alpha = 2 * soft_edge[i] / arr.shape[i]
+            alpha = np.clip(alpha, 0, 1)
+            win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
+            arr *= cp.moveaxis(win[:, None, None], 0, i)
 
     arr = arr.astype(input_dtype, copy=False)
     if was_numpy:
