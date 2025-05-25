@@ -23,6 +23,7 @@ from .ndimage import (
     periodic_smooth_decomposition_nd_rfft,
     sliding_block,
     upsampled_dft_rfftn,
+    soften_edges,
 )
 
 ArrayType = Union[np.ndarray, cp.ndarray]
@@ -641,6 +642,7 @@ class RegFilter(BaseModel):
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
+    soft_edge: Union[float, List[float]] = 0.0
 
     def __call__(self, vol, reg_mask=None):
         """Apply the filter to the volume
@@ -651,6 +653,8 @@ class RegFilter(BaseModel):
             cupy.ndarray: Filtered volume
         """
         vol = cp.clip(cp.array(vol, "float32", copy=False) - self.clip_thresh, 0, None)
+        if np.any(np.array(self.soft_edge) > 0):
+            vol = soften_edges(vol, soft_edge=self.soft_edge, copy=False)
         if reg_mask is not None:
             vol *= cp.array(reg_mask, dtype="float32", copy=False)
         if self.dog:
