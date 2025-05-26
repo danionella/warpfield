@@ -55,6 +55,11 @@ class WarpMap:
         Returns:
             cupy.array: warped volume
         """
+        # check if shape underlying warpfield (considering block size and stride) is larger than vol
+        inferred_shape = self.warp_field.shape[1:] * self.block_stride.get() + self.block_size.get()
+        if np.any(inferred_shape < np.array(vol.shape)):
+            warnings.warn(f"The underlying warp field shape (~ {self.warp_field.shape[1:]}) is smaller than the volume shape ({vol.shape}). The warp may not cover the entire volume.")
+
         vol_out = warp_volume(
             vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
         )
@@ -167,47 +172,63 @@ class WarpMap:
         #                                                            order=1, mode='nearest') + target.warp_field[idim]
         return WarpMap(warp_field, target.block_size, target.block_stride)
 
-    def invert(self, method="linear"):
-        """ Invert the displacement field
+    # def invert_slow(self, method="linear"):
+    #     """ Invert the displacement field using slow griddata interpolation.
 
-        Args:
-            method (str): interpolation method. 'linear' (default) or 'nearest'
+    #     Args:
+    #         method (str): interpolation method. 'linear' (default) or 'nearest'
 
-        Returns:
-            WarpMap: inverted WarpMap
-        """
-        warp_field = self.warp_field.get()
-        block_size = self.block_size.get()
-        # warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
-        block_stride = self.block_stride.get()
-        warp_field_coords = (
-            np.indices(warp_field.shape[1:]) * block_stride[:, None, None, None] + (block_size / 2)[:, None, None, None]
-        )
-        out = np.zeros_like(warp_field)
-        for i in range(3):
-            out[i] = -scipy.interpolate.griddata(
-                (warp_field_coords + warp_field).reshape(3, -1).T,
-                warp_field[i].flatten(),
-                warp_field_coords.reshape(3, -1).T,
-                method=method,
-            ).reshape(warp_field.shape[1:])
-        return WarpMap(out, block_size)
+    #     Returns:
+    #         WarpMap: inverted WarpMap
+    #     """
+    #     warp_field = self.warp_field.get()
+    #     block_size = self.block_size.get()
+    #     # warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
+    #     block_stride = self.block_stride.get()
+    #     warp_field_coords = (
+    #         np.indices(warp_field.shape[1:]) * block_stride[:, None, None, None] + (block_size / 2)[:, None, None, None]
+    #     )
+    #     out = np.zeros_like(warp_field)
+    #     for i in range(3):
+    #         out[i] = -scipy.interpolate.griddata(
+    #             (warp_field_coords + warp_field).reshape(3, -1).T,
+    #             warp_field[i].flatten(),
+    #             warp_field_coords.reshape(3, -1).T,
+    #             method=method,
+    #         ).reshape(warp_field.shape[1:])
+    #     return WarpMap(out, block_size, block_stride)
 
-    def invert_fast(self, sigma=0.5, truncate=20):
+    def invert(self, **kwargs):
+        """alias for invert_fast method"""
+        return self.invert_fast(**kwargs)
+
+    def invert_fast(self, sigma=0.5, truncate=20, target_shape=None):
         """Invert the displacement field using accumulation and Gaussian basis interpolation.
 
+        Args:
+            sigma (float): standard deviation for Gaussian basis interpolation
+            truncate (float): truncate parameter for Gaussian basis interpolation
+            target_shape (tuple): shape of the underlying data. If None, infer from current warp field shape.
+
         Returns:
             WarpMap: inverted WarpMap
         """
         warp_field = self.warp_field.get()
-        inv_field = np.zeros_like(warp_field)
-        # target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_size[:,None,None,None].get()
         target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_stride[:, None, None, None].get()
-        num_coords = accumarray(target_coords, target_coords.shape[1:])
+        if target_shape is None:
+            wf_shape = np.array([target_coords[i].max() + 1.5 for i in range(3)]).astype(int)
+            wf_shape = np.clip(wf_shape, 1, None)
+            if np.any(wf_shape > 1000):
+                warnings.warn("Inferred target shape is larger than 1000 voxels along any axis. This may lead to high memory usage.")
+        else:
+            wf_shape = np.ceil(np.array(target_shape) / self.block_stride.get() + 1).astype("int")
+        num_coords = accumarray(target_coords, wf_shape)
+        inv_field = np.zeros((3,*wf_shape), dtype=warp_field.dtype)
         for i in range(3):
-            inv_field[i] = accumarray(target_coords, target_coords.shape[1:], weights=warp_field[i].ravel())
+            inv_field[i] = -accumarray(target_coords, wf_shape, weights=warp_field[i].ravel())
             with np.errstate(invalid="ignore"):
                 inv_field[i] /= num_coords
+            inv_field[i][num_coords == 0] = np.nan
             inv_field[i] = infill_nans(inv_field[i], sigma=sigma, truncate=truncate)
         return WarpMap(inv_field, self.block_size, self.block_stride)
 
