@@ -55,6 +55,11 @@ class WarpMap:
         Returns:
             cupy.array: warped volume
         """
+        # check if shape underlying warpfield (considering block size and stride) is larger than vol
+        inferred_shape = self.warp_field.shape[1:] * self.block_stride.get() + self.block_size.get()
+        if np.any(inferred_shape < np.array(vol.shape)):
+            warnings.warn(f"The underlying warp field shape (~ {self.warp_field.shape[1:]}) is smaller than the volume shape ({vol.shape}). The warp may not cover the entire volume.")
+
         vol_out = warp_volume(
             vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
         )
