@@ -169,20 +169,25 @@ def accumarray(coords, shape, weights=None, clip=False):
     return accum
 
 
-def infill_nans(arr, sigma=0.5, truncate=50):
+def infill_nans(arr, sigma=0.5, truncate=50, ignore_warning=True):
     """Infill NaNs in an array using Gaussian basis interpolation
 
     Args:
         arr (array_like): input array
         sigma (float): standard deviation of the Gaussian basis function
-        truncate (float): truncate the filter at this many standard deviations
+        truncate (float): truncate the filter at this many standard deviations. Note: values outside the truncation may still contain NaNs.
+        ignore_warning (bool): if True, ignore warnings about invalid values during division
     """
     nans = np.isnan(arr)
     arr_zeros = arr.copy()
     arr_zeros[nans] = 0
     a = scipy.ndimage.gaussian_filter(np.array(arr_zeros, dtype="float64"), sigma=sigma, truncate=truncate)
     b = scipy.ndimage.gaussian_filter(np.array(~nans, dtype="float64"), sigma=sigma, truncate=truncate)
-    out = (a / b).astype(arr.dtype)
+    if ignore_warning:
+        with np.errstate(invalid="ignore"):
+            out = (a / b).astype(arr.dtype)
+    else:
+        out = (a / b).astype(arr.dtype)
     return out
 
 
