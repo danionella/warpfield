@@ -102,7 +102,7 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 > [!IMPORTANT]
 > Fixed and moving volumes are expected to be of the same voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
 >
-> If the moving volume does not already have the same resolution (vozel size) as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom) to match scale:
+> If the moving volume does not already have the same resolution (voxel size) as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom) to match scale:
 > 
 > ```python
 > vol_mov = zoom(vol_mov, zoom_factors = voxel_size_moving/voxel_size_fixed) # voxel sizes are 3-tuples of floats
