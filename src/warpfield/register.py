@@ -172,8 +172,35 @@ class WarpMap:
         #                                                            order=1, mode='nearest') + target.warp_field[idim]
         return WarpMap(warp_field, target.block_size, target.block_stride)
 
-    def invert(self, method="linear"):
-        """ Invert the displacement field
+    # def invert_slow(self, method="linear"):
+    #     """ Invert the displacement field using slow griddata interpolation.
+
+    #     Args:
+    #         method (str): interpolation method. 'linear' (default) or 'nearest'
+
+    #     Returns:
+    #         WarpMap: inverted WarpMap
+    #     """
+    #     warp_field = self.warp_field.get()
+    #     block_size = self.block_size.get()
+    #     # warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
+    #     block_stride = self.block_stride.get()
+    #     warp_field_coords = (
+    #         np.indices(warp_field.shape[1:]) * block_stride[:, None, None, None] + (block_size / 2)[:, None, None, None]
+    #     )
+    #     out = np.zeros_like(warp_field)
+    #     for i in range(3):
+    #         out[i] = -scipy.interpolate.griddata(
+    #             (warp_field_coords + warp_field).reshape(3, -1).T,
+    #             warp_field[i].flatten(),
+    #             warp_field_coords.reshape(3, -1).T,
+    #             method=method,
+    #         ).reshape(warp_field.shape[1:])
+    #     return WarpMap(out, block_size, block_stride)
+
+    def invert(self, **kwargs):
+        """alias for invert_fast method"""
+        return self.invert_fast(**kwargs)
 
         Args:
             method (str): interpolation method. 'linear' (default) or 'nearest'
