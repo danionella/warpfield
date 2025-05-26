@@ -88,9 +88,19 @@ def load_data(file_path: str):
             raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
         data = mat_data[variable_name]
         return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
+    
+    elif file_path.endswith(".nrrd") or file_path.endswith(".nhdr"):
+        try:
+            import nrrd
+        except ImportError:
+            raise ImportError("The 'pynrrd' package is required to load NRRD files. Please install it.")
+        data, header = nrrd.read(file_path)
+        return data, dict(filetype="nrrd", path=file_path, meta=header)
 
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
+    
+
 
 
 def create_rgb_video(fn, reference, moving, fps=10, quality=9):

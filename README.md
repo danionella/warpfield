@@ -21,7 +21,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Python API and command-line interface (CLI)
-- Support for `.h5`, `.nii`, `.tiff`, and `.npy` file formats
+- Support for `.h5`, `.nii`, `.tiff`, `.nrrd` and `.npy` file formats
 
 ### General Principle
 
@@ -123,7 +123,7 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.nii`, `.tiff`, `.npy`). For hierarchical file formats (`.h5`), specify the dataset name using the format `filename.h5:dataset_name`. 
+- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.nii`, `.tiff`, `.nrrd`, `.npy`). For hierarchical file formats (`.h5`), specify the dataset name using the format `filename.h5:dataset_name`. 
 - `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
