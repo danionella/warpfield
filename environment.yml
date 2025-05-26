@@ -17,6 +17,7 @@ dependencies:
   - hdf5plugin
   - nibabel
   - tifffile
+  - pynrrd
 # for videos:
   - imageio
   - imageio-ffmpeg
