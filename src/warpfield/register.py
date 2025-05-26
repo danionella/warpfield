@@ -444,12 +444,10 @@ class RegistrationPyramid:
         """
         was_numpy = isinstance(vol, np.ndarray)
         vol = cp.array(vol, "float32", copy=False, order="C")
-        # warp_map = None
         offsets = (cp.array(vol.shape) - cp.array(self.ref_shape))/2
         warp_map = WarpMap(offsets[:,None,None,None], cp.ones(3), cp.ones(3)).resize_to(self.mappers[-1])
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
-        # vol_tmp = vol_tmp0.copy()
         vol_tmp = cp.zeros(self.ref_shape, dtype="float32", order="C")
         warp_map.warp(vol_tmp0, out=vol_tmp)
         min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
@@ -490,16 +488,11 @@ class RegistrationPyramid:
                 else:
                     wm = wm.resize_to(self.mappers[-1])
 
-                # if warp_map is None:
-                #     warp_map = WarpMap(wm.warp_field.copy(), wm.block_size.copy(), wm.block_stride.copy())
-                # else:
-                #     warp_map = warp_map.chain(wm)
                 warp_map = warp_map.chain(wm)
                 warp_map.warp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
                     # callback_output.append(callback(warp_map.unwarp(vol)))
                     callback_output.append(callback(vol_tmp))
-        # vol = warp_map.warp(vol)
         warp_map.warp(vol, out=vol_tmp)
         if was_numpy:
             vol_tmp = vol_tmp.get()
@@ -527,7 +520,6 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    #assert ref.shape == vol.shape, "Reference and volume shapes must be the same"
     recipe.model_validate(recipe.model_dump())
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
