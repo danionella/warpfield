@@ -29,6 +29,7 @@ dependencies = [
     "scikit-image",
     "imageio",
     "imageio-ffmpeg",
+    "pynrrd",
 ]
 classifiers = [
     "Operating System :: Microsoft :: Windows",
