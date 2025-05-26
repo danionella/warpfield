@@ -339,14 +339,16 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
     was_numpy = isinstance(arr, np.ndarray)
     input_dtype = arr.dtype
     arr = cp.array(arr, dtype="float32", copy=copy)
+    if isinstance(soft_edge, int) or isinstance(soft_edge, float):
+        soft_edge = (soft_edge,) * arr.ndim
+    soft_edge = np.clip(soft_edge, 0, np.array(arr.shape) / 2)
 
-    if any(s > 0 for s in soft_edge):
-        for i in range(arr.ndim):
-            if soft_edge[i] > 0:
-                alpha = 2 * soft_edge[i] / arr.shape[i]
-                alpha = np.clip(alpha, 0, 1)
-                win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
-                arr *= cp.moveaxis(win[:, None, None], 0, i)
+    for i in range(arr.ndim):
+        if soft_edge[i] > 0:
+            alpha = 2 * soft_edge[i] / arr.shape[i]
+            alpha = np.clip(alpha, 0, 1)
+            win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
+            arr *= cp.moveaxis(win[:, None, None], 0, i)
 
     arr = arr.astype(input_dtype, copy=False)
     if was_numpy:
@@ -439,88 +441,92 @@ def match_volumes(fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0
     return fixed_out, moving_out, tuple(target_res)
 
 
-def richardson_lucy_blind(img, psf=None, num_iter=5, update_psf=False):
-    """Richardson-Lucy deconvolution (regular and blind)
+def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1e-6, beta=0.0):
+    """Richardson-Lucy deconvolution using arbitrary convolution operations, with optional Biggs acceleration.
 
     Args:
         img (ndarray): input image or volume
-        psf (ndarray): known psf or initial estimate (before fftshift)
+        convolve_psf (function): convolution with PSF
+        correlate_psf (function): correlation with PSF; defaults to convolve_psf if PSF is symmetric
         num_iter (int): number of iterations
-        update_psf (bool): True for blind deconvolution
-
-    Returns:
-        - ndarray: deconvolved image
-        - ndarray: psf
-    """
-
-    if psf is None and update_psf:
-        psf = cp.ones(img.shape, dtype="float32") / img.size
-    psf = cp.array(psf, "float32")
-    psf /= psf.sum()
-    psf = cp.fft.ifftshift(psf)
-    psf_ft = cp.fft.rfftn(psf)
-    img = cp.array(img, dtype="float32", copy=False)
-    img_decon = img.copy()
-    img_decon_ft = cp.fft.rfftn(img_decon)
-    ratio = cp.ones_like(img_decon)
-    ratio_ft = cp.fft.rfftn(ratio)
-
-    for _ in range(num_iter):
-        ratio[:] = img / cp.fft.irfftn(img_decon_ft * psf_ft)
-        ratio_ft[:] = cp.fft.rfftn(ratio)
-        img_decon *= cp.fft.irfftn(ratio_ft * psf_ft.conj())
-        img_decon_ft[:] = cp.fft.rfftn(img_decon)
-        if update_psf:
-            psf *= cp.fft.irfftn(ratio_ft * img_decon_ft.conj())
-            psf /= psf.sum()
-            psf_ft[:] = cp.fft.rfftn(psf)
-
-    return img_decon, cp.fft.fftshift(psf)
-
-
-def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1 / 100):
-    """Richardson-Lucy deconvolution using arbitrary convolution operations
-
-    Args:
-        img (ndarray): input image or volume
-        convolve_psf (function): function that convolves an image with a psf
-        correlate_psf (function): function that correlates an image with a psf. If None, it is assumed that the psf is symmetric and the correlation is computed using the convolution.
-        num_iter (int): number of iterations
+        epsilon (float): small constant to prevent divide-by-zero
+        beta (float): acceleration parameter (0 = no acceleration)
 
     Returns:
         ndarray: deconvolved image
     """
-    img = cp.clip(cp.array(img, dtype="float32", copy=False), 0, None) + np.float32(epsilon)
+    epsilon = np.float32(epsilon)
+    img = cp.clip(cp.array(img, dtype="float32", copy=False), 0, None) + epsilon
     if num_iter < 1:
         return img
     if correlate_psf is None:
         correlate_psf = convolve_psf
+
     img_decon = img.copy()
 
-    for _ in range(num_iter):
+    for i in range(num_iter):
         img_decon *= correlate_psf(img / convolve_psf(img_decon))
+
+        if beta > 0:
+            if i == 0: 
+                img_decon_prev = img_decon.copy()
+            else:
+                tmp = img_decon.copy()  # save g_k before acceleration
+                img_decon += beta * (img_decon - img_decon_prev)
+                img_decon[:] = cp.clip(img_decon, epsilon, None)
+                img_decon_prev[:] = tmp
 
     return img_decon
 
 
-def richardson_lucy_gaussian(img, sigmas, num_iter=5):
+def richardson_lucy_fft(img, psf, num_iter=5, epsilon=1e-6, beta=0.0):
+    """Richardson-Lucy deconvolution using FFT-based convolution and optional Biggs acceleration.
+
+    Args:
+        img (ndarray): input image or volume
+        psf (ndarray): point spread function (before fftshift)
+        num_iter (int): number of iterations
+        epsilon (float): small constant to avoid divide-by-zero
+        beta (float): Biggs acceleration parameter (0 = no acceleration)
+
+    Returns:
+        ndarray: deconvolved image
+    """
+    psf = cp.array(psf, dtype="float32")
+    psf = cp.clip(psf, 0, None)
+    psf /= psf.sum()
+
+    shape = img.shape
+    psf_ft = cp.fft.rfftn(cp.fft.ifftshift(psf), s=shape)
+    psf_ft_conj = cp.conj(psf_ft)
+
+    def convolve(x):
+        return cp.fft.irfftn(cp.fft.rfftn(x, s=shape) * psf_ft, s=shape)
+
+    def correlate(x):
+        return cp.fft.irfftn(cp.fft.rfftn(x, s=shape) * psf_ft_conj, s=shape)
+
+    return richardson_lucy_generic(img, convolve, correlate, num_iter=num_iter, epsilon=epsilon, beta=beta)
+
+
+def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0):
     """Richardson-Lucy deconvolution using Gaussian convolution operations
 
     Args:
         img (ndarray): input image or volume
         sigmas (list or ndarray): list of Gaussian sigmas along each dimension
         num_iter (int): number of iterations
+        epsilon (float): small constant to prevent divide-by-zero
+        beta (float): acceleration parameter (0 = no acceleration)
 
     Returns:
         ndarray: deconvolved image
     """
-    import cupyx
-
     conv_with_gauss = lambda x: cupyx.scipy.ndimage.gaussian_filter(x, sigmas)
-    return richardson_lucy_generic(img, conv_with_gauss, conv_with_gauss, num_iter)
+    return richardson_lucy_generic(img, conv_with_gauss, conv_with_gauss, num_iter, epsilon=epsilon, beta=beta)
 
 
-def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5):
+def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5, epsilon=1e-3, beta=0.0):
     """Richardson-Lucy deconvolution using a sheared Gaussian psf
 
     Args:
@@ -528,14 +534,14 @@ def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5):
         sigmas (list or ndarray): list of Gaussian sigmas along each dimension
         shear (scalar): shear ratio
         num_iter (int): number of iterations
+        epsilon (float): small constant to prevent divide-by-zero
+        beta (float): acceleration parameter (0 = no acceleration)
 
     Returns:
         ndarray: deconvolved image
     """
     if shear == 0:
         return richardson_lucy_gaussian(img, sigmas, num_iter)
-
-    import cupyx
 
     sigmas = np.array(sigmas)
     gw = cp.array(gausskernel_sheared(sigmas, shear=shear, truncate=4), "float32")
@@ -544,5 +550,5 @@ def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5):
     gw2 = gw.sum(axis=(0, 1))[None, None, :]
     gw2 /= gw2.sum()
     conv_shear = lambda vol: cupyx.scipy.ndimage.convolve(cupyx.scipy.ndimage.convolve(vol, gw01), gw2)
-    dec = richardson_lucy_generic(img, conv_shear, num_iter=num_iter)
+    dec = richardson_lucy_generic(img, conv_shear, num_iter=num_iter, epsilon=epsilon, beta=beta)
     return dec
