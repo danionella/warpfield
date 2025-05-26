@@ -208,7 +208,7 @@ class WarpMap:
         Args:
             sigma (float): standard deviation for Gaussian basis interpolation
             truncate (float): truncate parameter for Gaussian basis interpolation
-            target_shape (tuple): shape of the underlying data. If None, infer from curent warp field shape.
+            target_shape (tuple): shape of the underlying data. If None, infer from current warp field shape.
 
         Returns:
             WarpMap: inverted WarpMap
