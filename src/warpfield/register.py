@@ -9,7 +9,7 @@ import scipy.signal
 import cupy as cp
 import cupyx
 import cupyx.scipy.ndimage
-from pydantic import BaseModel, ValidationError 
+from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 
 from .warp import warp_volume
@@ -36,18 +36,19 @@ class WarpMap:
         warp_field (numpy.array): the displacement field data (3-x-y-z)
         block_size (3-element list or numpy.array):
         block_stride (3-element list or numpy.array):
+        ref_shape (tuple): shape of the reference volume
+        mov_shape (tuple): shape of the moving volume
     """
 
-    def __init__(self, warp_field, block_size, block_stride=None):
+    def __init__(self, warp_field, block_size, block_stride, ref_shape, mov_shape):
         self.warp_field = cp.array(warp_field, dtype="float32")
         self.block_size = cp.array(block_size, dtype="float32")
-        if block_stride is None:
-            self.block_stride = self.block_size
-        else:
-            self.block_stride = cp.array(block_stride, dtype="float32")
+        self.block_stride = cp.array(block_stride, dtype="float32")
+        self.ref_shape = ref_shape
+        self.mov_shape = mov_shape
 
     def warp(self, vol, out=None):
-        """Apply the warp to a volume
+        """Apply the warp to a volume. Can be thought of as pulling the moving volume to the fixed volume space.
 
         Args:
             vol (cupy.array): the volume to be warped
@@ -55,23 +56,18 @@ class WarpMap:
         Returns:
             cupy.array: warped volume
         """
-        # check if shape underlying warpfield (considering block size and stride) is larger than vol
-        inferred_shape = self.warp_field.shape[1:] * self.block_stride.get() + self.block_size.get()
-        if np.any(inferred_shape < np.array(vol.shape)):
-            warnings.warn(f"The underlying warp field shape (~ {self.warp_field.shape[1:]}) is smaller than the volume shape ({vol.shape}). The warp may not cover the entire volume.")
-
+        if np.any(vol.shape != np.array(self.mov_shape)):
+            warnings.warn(f"Volume shape {vol.shape} does not match the expected shape {self.mov_shape}.")
+        if out is None:
+            out = cp.zeros(self.ref_shape, dtype="float32", order="C")
         vol_out = warp_volume(
             vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
         )
         return vol_out
 
-    def apply(self, vol, out=None):
+    def apply(self, *args, **kwargs):
         """Alias of warp method"""
-        return self.warp(vol, out=out)
-
-    def pull_volume(self, vol, out=None):
-        """Alias of warp method"""
-        return self.warp(vol, out=out)
+        return self.warp(*args, **kwargs)
 
     def fit_affine(self, target=None):
         """Fit affine transformation and return new fitted WarpMap
@@ -94,22 +90,15 @@ class WarpMap:
 
         ix = cp.indices(self.warp_field.shape[1:]).reshape(3, -1).T
         ix = ix * self.block_stride + self.block_size / 2
-        # #added:
-        # offsets = cp.array(self.warp_field.shape[1:]) * self.block_stride / 2
-        # ix = ix - offsets
-        # #end added
         M = cp.zeros(self.warp_field.shape[1:])
         M[1:-1, 1:-1, 1:-1] = 1
         ixg = cp.where(M.flatten() > 0)[0]
         a = cp.hstack([ix[ixg], cp.ones((len(ixg), 1))])
         b = ix[ixg] + self.warp_field.reshape(3, -1).T[ixg]
         coeff = cp.linalg.lstsq(a, b, rcond=None)[0]
-        # try this for similarity transform:
-        # import skimage.transform._geometric
-        # coeff = cp.array(skimage.transform._geometric._umeyama(a[:,:3].get(), b.get(), estimate_scale=True))[:3,:].T
         ix_out = cp.indices(warp_field_shape[1:]).reshape(3, -1).T * block_stride + block_size / 2
         linfit = ((ix_out @ (coeff[:3] - cp.eye(3))) + coeff[3]).T.reshape(warp_field_shape)
-        return WarpMap(linfit, block_size, block_stride), coeff
+        return WarpMap(linfit, block_size, block_stride, self.ref_shape, self.mov_shape), coeff
 
     def median_filter(self):
         """Apply median filter to the displacement field
@@ -118,7 +107,7 @@ class WarpMap:
             WarpMap: new WarpMap with median filtered displacement field
         """
         warp_field = cupyx.scipy.ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
-        return WarpMap(warp_field, self.block_size, self.block_stride)
+        return WarpMap(warp_field, self.block_size, self.block_stride, self.ref_shape, self.mov_shape)
 
     def resize_to(self, target):
         """Resize to target WarpMap, using linear interpolation
@@ -153,10 +142,10 @@ class WarpMap:
                 for i in range(3)
             ]
         )
-        return WarpMap(dm_r, t_bsz, t_bst)
+        return WarpMap(dm_r, t_bsz, t_bst, self.ref_shape, self.mov_shape)
 
     def chain(self, target):
-        """ Chain displacement maps
+        """Chain displacement maps
 
         Args:
             target (WarpMap): WarpMap to be added to existing map
@@ -167,79 +156,43 @@ class WarpMap:
         indices = cp.indices(target.warp_field.shape[1:])
         warp_field = self.warp_field.copy()
         warp_field += target.warp_field
-        # for idim in range(3):
-        #     warp_field[idim] = cupyx.scipy.ndimage.map_coordinates(warp_field[idim], indices + target.warp_field / self.block_size[:, None, None, None],
-        #                                                            order=1, mode='nearest') + target.warp_field[idim]
-        return WarpMap(warp_field, target.block_size, target.block_stride)
-
-    # def invert_slow(self, method="linear"):
-    #     """ Invert the displacement field using slow griddata interpolation.
-
-    #     Args:
-    #         method (str): interpolation method. 'linear' (default) or 'nearest'
-
-    #     Returns:
-    #         WarpMap: inverted WarpMap
-    #     """
-    #     warp_field = self.warp_field.get()
-    #     block_size = self.block_size.get()
-    #     # warp_field_coords = (np.indices(warp_field.shape[1:]) + 0.5) * block_size[:,None,None,None]
-    #     block_stride = self.block_stride.get()
-    #     warp_field_coords = (
-    #         np.indices(warp_field.shape[1:]) * block_stride[:, None, None, None] + (block_size / 2)[:, None, None, None]
-    #     )
-    #     out = np.zeros_like(warp_field)
-    #     for i in range(3):
-    #         out[i] = -scipy.interpolate.griddata(
-    #             (warp_field_coords + warp_field).reshape(3, -1).T,
-    #             warp_field[i].flatten(),
-    #             warp_field_coords.reshape(3, -1).T,
-    #             method=method,
-    #         ).reshape(warp_field.shape[1:])
-    #     return WarpMap(out, block_size, block_stride)
+        return WarpMap(warp_field, target.block_size, target.block_stride, self.ref_shape, self.mov_shape)
 
     def invert(self, **kwargs):
         """alias for invert_fast method"""
         return self.invert_fast(**kwargs)
 
-    def invert_fast(self, sigma=0.5, truncate=20, target_shape=None):
+    def invert_fast(self, sigma=0.5, truncate=20):
         """Invert the displacement field using accumulation and Gaussian basis interpolation.
 
         Args:
             sigma (float): standard deviation for Gaussian basis interpolation
             truncate (float): truncate parameter for Gaussian basis interpolation
-            target_shape (tuple): shape of the underlying data. If None, infer from current warp field shape.
 
         Returns:
             WarpMap: inverted WarpMap
         """
         warp_field = self.warp_field.get()
         target_coords = np.indices(warp_field.shape[1:]) + warp_field / self.block_stride[:, None, None, None].get()
-        if target_shape is None:
-            wf_shape = np.array([target_coords[i].max() + 1.5 for i in range(3)]).astype(int)
-            wf_shape = np.clip(wf_shape, 1, None)
-            if np.any(wf_shape > 1000):
-                warnings.warn("Inferred target shape is larger than 1000 voxels along any axis. This may lead to high memory usage.")
-        else:
-            wf_shape = np.ceil(np.array(target_shape) / self.block_stride.get() + 1).astype("int")
+        wf_shape = np.ceil(np.array(self.mov_shape) / self.block_stride.get() + 1).astype("int")
         num_coords = accumarray(target_coords, wf_shape)
-        inv_field = np.zeros((3,*wf_shape), dtype=warp_field.dtype)
+        inv_field = np.zeros((3, *wf_shape), dtype=warp_field.dtype)
         for i in range(3):
             inv_field[i] = -accumarray(target_coords, wf_shape, weights=warp_field[i].ravel())
             with np.errstate(invalid="ignore"):
                 inv_field[i] /= num_coords
             inv_field[i][num_coords == 0] = np.nan
             inv_field[i] = infill_nans(inv_field[i], sigma=sigma, truncate=truncate)
-        return WarpMap(inv_field, self.block_size, self.block_stride)
+        return WarpMap(inv_field, self.block_size, self.block_stride, self.mov_shape, self.ref_shape)
 
     def push_coordinates(self, coords, negative_shifts=False):
-        """Push coordinates through the warp field
+        """Push voxel coordinates from fixed to moving space.
 
         Args:
-            coords (numpy.array): 3D coordinates to be warped (3-by-n array)
+            coords (numpy.array): 3D *voxel* coordinates to be warped (3-by-n array)
 
         Returns:
-            numpy.array: warped coordinates
+            numpy.array: transformed voxel coordinates
         """
         assert coords.shape[0] == 3
         coords = cp.array(coords, dtype="float32")
@@ -256,7 +209,15 @@ class WarpMap:
         return coords + shifts
 
     def pull_coordinates(self, coords):
-        return self.invert_fast().push_coordinates(coords, negative_shifts=True)
+        """Pull voxel coordinates through the warp field. Involves inversion, followed by pushing coordinates.
+
+        Args:
+            coords (numpy.array): 3D *voxel* coordinates to be warped (3-by-n array)
+
+        Returns:
+            numpy.array: transformed voxel coordinates
+        """
+        return self.invert().push_coordinates(coords, negative_shifts=True)
 
     def jacobian_det(self, units_per_voxel=[1, 1, 1], edge_order=1):
         """
@@ -300,6 +261,17 @@ class WarpMap:
         )
         return ants_image
 
+    def __repr__(self):
+        """String representation of the WarpMap object."""
+        info = (
+            f"WarpMap("
+            f"warp_field_shape={self.warp_field.shape}, "
+            f"block_size={self.block_size.get()}, "
+            f"block_stride={self.block_stride.get()}, "
+            f"transformation: {str(self.mov_shape)} --> {str(self.ref_shape)}"
+        )
+        return info
+
 
 class WarpMapper:
     """Class that estimates warp field using cross-correlation, based on a piece-wise rigid model.
@@ -320,6 +292,7 @@ class WarpMapper:
         self.epsilon = epsilon
         self.tukey_alpha = tukey_alpha
         self.update_reference(ref_vol, block_size, block_stride)
+        self.ref_shape = np.array(ref_vol.shape)
         if np.any(block_size > np.array(ref_vol.shape)):
             raise ValueError(f"Block size ({block_size}) must be smaller than the volume shape ({ref_vol.shape})")
 
@@ -405,7 +378,7 @@ class WarpMapper:
             ).astype("float32")
             / 2
         )
-        return WarpMap(disp_field, block_size=self.block_size, block_stride=self.block_stride)
+        return WarpMap(disp_field, self.block_size, self.block_stride, self.ref_shape, vol.shape)
 
 
 class RegistrationPyramid:
@@ -465,8 +438,9 @@ class RegistrationPyramid:
         """
         was_numpy = isinstance(vol, np.ndarray)
         vol = cp.array(vol, "float32", copy=False, order="C")
-        offsets = (cp.array(vol.shape) - cp.array(self.ref_shape))/2
-        warp_map = WarpMap(offsets[:,None,None,None], cp.ones(3), cp.ones(3)).resize_to(self.mappers[-1])
+        offsets = (cp.array(vol.shape) - cp.array(self.ref_shape)) / 2
+        warp_map = WarpMap(offsets[:, None, None, None], cp.ones(3), cp.ones(3), self.ref_shape, vol.shape)
+        warp_map = warp_map.resize_to(self.mappers[-1])
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
         vol_tmp = cp.zeros(self.ref_shape, dtype="float32", order="C")
@@ -718,17 +692,14 @@ class Recipe(BaseModel):
 
     pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
-        LevelConfig( # translation level
-            block_size=[-1, -1, -1],
-            repeats=1,
-        ),
-        LevelConfig( # affine level
+        LevelConfig(block_size=[-1, -1, -1], repeats=1),  # translation level
+        LevelConfig(  # affine level
             block_size=[-4, -4, -4],
             repeats=10,
             affine=True,
             median_filter=False,
             smooth=Smoother(sigmas=[0.5, 0.5, 0.5]),
-        )
+        ),
     ]
 
     def add_level(self, block_size, **kwargs):
