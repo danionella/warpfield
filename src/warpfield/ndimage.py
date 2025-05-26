@@ -481,7 +481,7 @@ def richardson_lucy_generic(img, convolve_psf, correlate_psf=None, num_iter=5, e
                 img_decon += beta * (img_decon - img_decon_prev)
                 cp.clip(img_decon, epsilon, None, out=img_decon)
                 img_decon_prev = img_decon_new
-
+    
     return img_decon
 
 
