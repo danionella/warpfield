@@ -122,7 +122,7 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For hierarchical single-file formats (`.h5`, `.zarr`, `.n5`), specify the dataset name using the format `filename.h5/dataset_name`. 
+- `--fixed`: Path to the fixed 3D volume file (`.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For hierarchical storage formats (`.h5`, `.zarr`, `.n5`), specify the dataset name using the format `filename.h5/dataset_name`. 
 - `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
