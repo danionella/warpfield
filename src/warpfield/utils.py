@@ -88,7 +88,7 @@ def load_data(file_path: str):
             raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
         data = mat_data[variable_name]
         return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
-    
+
     elif file_path.endswith(".nrrd") or file_path.endswith(".nhdr"):
         try:
             import nrrd
@@ -97,10 +97,18 @@ def load_data(file_path: str):
         data, header = nrrd.read(file_path)
         return data, dict(filetype="nrrd", path=file_path, meta=header)
 
+    elif ".zarr" in file_path or ".n5" in file_path:
+        try:
+            import zarr
+        except ImportError:
+            raise ImportError("The 'zarr' package is required to load Zarr/N5 files. Please install it.")
+        arr = zarr.open(file_path, mode="r")
+        data = np.array(arr)
+        meta = dict(getattr(arr, "attrs", {}))
+        return data, dict(filetype="zarr", path=file_path, meta=meta)
+
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
-    
-
 
 
 def create_rgb_video(fn, reference, moving, fps=10, quality=9):

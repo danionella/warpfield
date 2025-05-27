@@ -30,6 +30,7 @@ dependencies = [
     "imageio",
     "imageio-ffmpeg",
     "pynrrd",
+    "zarr",
 ]
 classifiers = [
     "Operating System :: Microsoft :: Windows",
