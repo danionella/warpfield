@@ -34,6 +34,14 @@ def load_data(file_path: str):
             data = np.array(f[key])
             attrs = dict(f[key].attrs)  # Extract attributes as metadata
         return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
+    
+    elif ".h5/" in file_path or ".hdf5/" in file_path:
+        base, key = file_path.split(".h5/", 1) if ".h5/" in file_path else file_path.split(".hdf5/", 1)
+        file_path = base + (".h5" if ".h5/" in file_path else ".hdf5")
+        with h5py.File(file_path, "r") as f:
+            data = np.array(f[key])
+            attrs = dict(f[key].attrs)
+        return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
 
     elif file_path.endswith(".h5") or file_path.endswith(".hdf5") or file_path.endswith(".mat"):
         raise ValueError(
