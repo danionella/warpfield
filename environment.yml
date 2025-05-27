@@ -18,6 +18,7 @@ dependencies:
   - nibabel
   - tifffile
   - pynrrd
+  - zarr
 # for videos:
   - imageio
   - imageio-ffmpeg
