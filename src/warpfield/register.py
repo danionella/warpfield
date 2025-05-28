@@ -91,7 +91,8 @@ class WarpMap:
         ix = cp.indices(self.warp_field.shape[1:]).reshape(3, -1).T
         ix = ix * self.block_stride + self.block_size / 2
         M = cp.zeros(self.warp_field.shape[1:])
-        M[1:-1, 1:-1, 1:-1] = 1
+        #M[1:-1, 1:-1, 1:-1] = 1
+        M[:,:,:] = 1
         ixg = cp.where(M.flatten() > 0)[0]
         a = cp.hstack([ix[ixg], cp.ones((len(ixg), 1))])
         b = ix[ixg] + self.warp_field.reshape(3, -1).T[ixg]
