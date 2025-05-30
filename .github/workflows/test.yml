@@ -39,8 +39,12 @@ jobs:
       - name: Get cache key for current week and OS
         id: cachekey
         run: |
-          echo "key=env-${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
-          
+          echo "cache_key=env-${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
+
+      - name: Show cache key
+        run: |
+          echo "Using key: ${{ steps.cachekey.outputs.cache_key }}"
+
       - uses: mamba-org/setup-micromamba@v2
         with:
           create-args: >-
@@ -51,7 +55,7 @@ jobs:
             powershell
           cache-downloads: true
           cache-environment: true
-          cache-environment-key: ${{ steps.cachekey.outputs.key }}
+          cache-environment-key: ${{ steps.cachekey.outputs.cache_key }}
           post-cleanup: 'all'
       
       - name: Install dependencies
