@@ -26,8 +26,7 @@ from .ndimage import (
     soften_edges,
 )
 
-ArrayType = Union[np.ndarray, cp.ndarray]
-
+_ArrayType = Union[np.ndarray, cp.ndarray]
 
 class WarpMap:
     """Represents a 3D displacement field
@@ -91,7 +90,8 @@ class WarpMap:
         ix = cp.indices(self.warp_field.shape[1:]).reshape(3, -1).T
         ix = ix * self.block_stride + self.block_size / 2
         M = cp.zeros(self.warp_field.shape[1:])
-        M[1:-1, 1:-1, 1:-1] = 1
+        #M[1:-1, 1:-1, 1:-1] = 1
+        M[:,:,:] = 1
         ixg = cp.where(M.flatten() > 0)[0]
         a = cp.hstack([ix[ixg], cp.ones((len(ixg), 1))])
         b = ix[ixg] + self.warp_field.reshape(3, -1).T[ixg]
@@ -464,14 +464,9 @@ class RegistrationPyramid:
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     wm = wm.median_filter()
                 if self.recipe.levels[self.mapper_ix[k]].affine:
-                    if np.any(np.array(mapper.blocks_shape[:3]) < 3):
+                    if (np.array(mapper.blocks_shape[:3]) < 2).sum() > 1:
                         raise ValueError(
-                            f"Affine fit is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {vol.shape}; block size: {mapper.block_size}"
-                        )
-                    if (np.array(mapper.blocks_shape[:3]) < 4).sum() > 1:
-                        # if more than one axis has fewer than 4 blocks, affine fit is not supported either
-                        raise ValueError(
-                            f"Affine fit needs at least two axes with at least 4 blocks! Volume shape: {vol.shape}; block size: {mapper.block_size}"
+                            f"Affine fit needs at least two axes with at least 2 blocks! Volume shape: {self.ref_shape}; block size: {mapper.block_size}"
                         )
                     wm, _ = wm.fit_affine(
                         target=dict(
@@ -549,8 +544,8 @@ class Projector(BaseModel):
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
-    low: float = 0.5
-    high: float = 10.0
+    low: Union[Union[int, float], List[Union[int, float]]] = 0.5
+    high: Union[Union[int, float], List[Union[int, float]]] = 10.0
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
@@ -567,9 +562,12 @@ class Projector(BaseModel):
             out = vol_blocks.mean(axis)
         if self.periodic_smooth:
             out = periodic_smooth_decomposition_nd_rfft(out)
+        low = np.delete(np.r_[1,1,1] * self.low, axis)
+        high = np.delete(np.r_[1,1,1] * self.high, axis)
         if self.dog:
-            sigmas = np.r_[0, 0, 0, 1, 1]
-            out = dogfilter(out, sigmas * self.low, sigmas * self.high, mode="reflect")
+            out = dogfilter(out, [0, 0, 0, *low], [0, 0, 0, *high], mode="reflect")
+        elif not np.all(np.array(self.low) == 0):
+            out = cupyx.scipy.ndimage.gaussian_filter(out, [0, 0, 0, *low], mode="reflect", truncate=5.0)
         if self.normalize > 0:
             out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         return out
@@ -636,7 +634,7 @@ class RegFilter(BaseModel):
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
-    soft_edge: Union[float, List[float]] = 0.0
+    soft_edge: Union[Union[int, float], List[Union[int, float]]] = 0.0
 
     def __call__(self, vol, reg_mask=None):
         """Apply the filter to the volume
@@ -673,7 +671,7 @@ class LevelConfig(BaseModel):
 
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
-    project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
+    project: Union[Projector, Callable[[_ArrayType, int], _ArrayType]] = Projector()
     tukey_ref: Union[float, None] = 0.5
     smooth: Union[Smoother, None] = Smoother()
     affine: bool = False
@@ -690,7 +688,7 @@ class Recipe(BaseModel):
         levels (list): List of LevelConfig objects
     """
 
-    pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
+    pre_filter: Union[RegFilter, Callable[[_ArrayType], _ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
         LevelConfig(block_size=[-1, -1, -1], repeats=1),  # translation level
         LevelConfig(  # affine level
