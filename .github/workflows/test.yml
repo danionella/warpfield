@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-latest, windows-latest]
-        python-version: ["3.9", "3.12"]
+        python-version: ["3.12"]
 
     defaults:
       run:
@@ -34,19 +34,29 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          channels: conda-forge
-          auto-activate-base: false
-          activate-environment: tests
-          environment-file: environment.yml
-          use-mamba: true
 
+      # - name: Get cache key for current week and OS
+      #   id: cachekey
+      #   run: |
+      #     echo "cache_key=${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          create-args: >-
+            cupy
+          environment-name: tests
+          init-shell: >-
+            bash
+            powershell
+          # cache-downloads: true
+          # cache-downloads-key: "download-${{ runner.os }}-${{ matrix.python-version }}"
+          # cache-environment: false
+          # #cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
+          post-cleanup: 'all'
+      
       - name: Install dependencies
         run: |
-          conda activate tests
-          conda install pytest
+          pip install pytest
 
       - name: Install package
         run: |
@@ -55,7 +65,6 @@ jobs:
       # this runs the platform-specific tests declared in tox.ini
       - name: Test with pytest
         run: |
-          conda activate tests
           pytest tests/
         env:
           PLATFORM: ${{ matrix.platform }}
