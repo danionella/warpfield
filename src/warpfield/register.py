@@ -550,8 +550,8 @@ class Projector(BaseModel):
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
-    low: float = 0.5
-    high: float = 10.0
+    low: Union[float, List[float, float, float]] = 0.5
+    high: Union[float, List[float, float, float]] = 10.0
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
@@ -568,9 +568,12 @@ class Projector(BaseModel):
             out = vol_blocks.mean(axis)
         if self.periodic_smooth:
             out = periodic_smooth_decomposition_nd_rfft(out)
+        low = np.delete(np.r_[1,1,1] * self.low, axis)
+        high = np.delete(np.r_[1,1,1] * self.high, axis)
         if self.dog:
-            sigmas = np.r_[0, 0, 0, 1, 1]
-            out = dogfilter(out, sigmas * self.low, sigmas * self.high, mode="reflect")
+            out = dogfilter(out, [0, 0, 0, *low], [0, 0, 0, *high], mode="reflect")
+        elif not np.all(np.array(self.low) == 0):
+            out = cupyx.scipy.ndimage.gaussian_filter(out, [0, 0, 0, *low], mode="reflect", truncate=5.0)
         if self.normalize > 0:
             out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         return out
