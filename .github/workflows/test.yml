@@ -35,18 +35,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          channels: conda-forge
-          auto-activate-base: false
-          activate-environment: tests
-          environment-file: environment.yml
-          use-mamba: true
+      # - uses: conda-incubator/setup-miniconda@v3
+      #   with:
+      #     channels: conda-forge
+      #     auto-activate-base: false
+      #     activate-environment: tests
+      #     environment-file: environment.yml
+      #     use-mamba: true
 
+      # - name: Install dependencies
+      #   run: |
+      #     conda activate tests
+      #     conda install pytest
+
+      
       - name: Install dependencies
         run: |
-          conda activate tests
-          conda install pytest
+          pip install pytest
 
       - name: Install package
         run: |
