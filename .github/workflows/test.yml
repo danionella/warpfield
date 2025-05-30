@@ -35,23 +35,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Get cache key for current week and OS
-        id: cachekey
-        run: |
-          echo "cache_key=${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
+      # - name: Get cache key for current week and OS
+      #   id: cachekey
+      #   run: |
+      #     echo "cache_key=${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
 
       - uses: mamba-org/setup-micromamba@v2
         with:
           create-args: >-
             cupy
+            python=${{ matrix.python-version }}
           environment-name: tests
           init-shell: >-
             bash
             powershell
-          cache-downloads: true
-          cache-downloads-key: "download-${{ runner.os }}-${{ matrix.python-version }}"
-          cache-environment: false
-          #cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
+          # cache-downloads: true
+          # cache-downloads-key: "download-${{ runner.os }}-${{ matrix.python-version }}"
+          # cache-environment: false
+          # #cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
           post-cleanup: 'all'
       
       - name: Install dependencies
