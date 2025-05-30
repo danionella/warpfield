@@ -550,8 +550,8 @@ class Projector(BaseModel):
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
-    low: Union[float, List[float, float, float]] = 0.5
-    high: Union[float, List[float, float, float]] = 10.0
+    low: Union[float, List[float]] = 0.5
+    high: Union[float, List[float]] = 10.0
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
