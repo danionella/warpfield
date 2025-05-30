@@ -38,7 +38,7 @@ jobs:
       - uses: mamba-org/setup-micromamba@v2
         with:
           create-args: >-
-            cuda-toolkit=12
+            cupy
           environment-name: tests
           init-shell: >-
             bash
