@@ -466,14 +466,9 @@ class RegistrationPyramid:
                 if self.recipe.levels[self.mapper_ix[k]].median_filter:
                     wm = wm.median_filter()
                 if self.recipe.levels[self.mapper_ix[k]].affine:
-                    if np.any(np.array(mapper.blocks_shape[:3]) < 1):
-                        raise ValueError(
-                            f"Affine fit is not supported for levels with fewer than 3 blocks along any axis! Volume shape: {self.ref_shape}; block size: {mapper.block_size}"
-                        )
                     if (np.array(mapper.blocks_shape[:3]) < 2).sum() > 1:
-                        # if more than one axis has fewer than 4 blocks, affine fit is not supported either
                         raise ValueError(
-                            f"Affine fit needs at least two axes with at least 4 blocks! Volume shape: {self.ref_shape}; block size: {mapper.block_size}"
+                            f"Affine fit needs at least two axes with at least 2 blocks! Volume shape: {self.ref_shape}; block size: {mapper.block_size}"
                         )
                     wm, _ = wm.fit_affine(
                         target=dict(
