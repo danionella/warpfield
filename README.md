@@ -110,16 +110,18 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 
 ## Command-Line Interface (CLI)
 
-The `warpfield` library provides a command-line interface. This allows you to perform registration directly from the terminal without writing Python code.
+The `warpfield` library provides a command-line interface, allowing you to perform registration directly from the terminal. We recommend starting with the Python interface to develop and optimize your recipes interactively. Once you are satisfied with the results, you can use the CLI for batch processing.
 
 #### Usage
 
 ```bash
 python -m warpfield --fixed <fixed_image_path> --moving <moving_image_path> --recipe <recipe_path> [options]
-# Remember that the two volumes have to have the same array shape.
 # You can use the `--help` flag to see instructions for the CLI:
 python -m warpfield --help
 ```
+
+<details>
+  <summary>Further details</summary>
 
 #### Required Arguments
 
@@ -143,7 +145,7 @@ The output file is an HDF5 file containing the following datasets:
   - `/block_stride`: The block stride (in voxels).
 - `/fixed_reg_inv` (optional): The fixed image registered to the moving image (if `--invert` is used).
 
-
+</details>
 
 ## Recipes
 
@@ -154,7 +156,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | Pre-filter parameter      | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 | `clip_thresh`     | Pixel value threshold for clipping each volume. Default is 0. This setting helps remove DC background, which can otherwise cause edges (the shifted volume is 0 outside the FOV).  |
-| `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True.                 |
+| `dog`             | If True, apply a 3D Difference-of-Gaussians (DoG) pre-filter to each volume. Default is True. If False (and σ<sub>low</sub> > 0), apply a simple Gaussian filter with σ<sub>low</sub> and ignore σ<sub>high</sub>. |
 | `low`             | The σ<sub>low</sub> value for the 3D DoG pre-filter. Default is 0.5           |
 | `high`            | The σ<sub>high</sub> value for the 3D DoG pre-filter. Default is 10.0. Note: σ<sub>low</sub> and σ<sub>high</sub> should be smaller and bigger than the feature of interest, respectively. A σ of 1 correponds to a FWHM of ~ 2.4.)             |
 | `soft_edge`      | Fade the borders of the volumes to 0 (black). Reduces edge effects for volumes in which the sample extends to the volume border or beyond. Float or list of 3 floats (for each axis): size of the fade in voxels from each border. If required, the fade should be larger than σ<sub>high</sub> (above). Defaults to 0.0 (disabled).|
@@ -223,7 +225,7 @@ recipe.levels[-1].repeats = 5
 ```
 
 > [!TIP]
-> The speed of `warpfield` enables rapid iterative optimization of the registration process. Start with a simple recipe, such as the one above. Deactivate all levels, except for the first affine level, by setting their `repeats` to 0. Confirm that the affine registration converged (increasing repeats should not change the result) and move on to the second level. If voxels are anisotropic, adjust `block_size` to make blocks roughly isotropic in real space. Inspect results as you change the settings and repeats of the second level, then add more fine-grained levels if necessary. Adjust `project.low` and `project.high` to the relevant feature size if needed (which may get smaller in finer levels). If the moving volume warps too much, consider larger blocks / fewer levels. Otherwise, increase `smooth.sigmas`, reduce repeats, or reduce `block_stride` to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) and tip below) to observe each level and repeats of the registration process. It is very helpful for troubleshooting and for reducing compute time by adjusting the number of levels and repeats to the necessary minimum.
+> The speed of `warpfield` enables rapid iterative optimization of the registration process. Start with a simple recipe, such as the one above. Deactivate all levels after the first affine level, by setting their `repeats` to 0. Confirm that the affine registration converged (increasing repeats should not change the result) and move on to the next level. If voxels are anisotropic, adjust `block_size` to make blocks roughly isotropic in real space. Inspect results as you change the settings and repeats of the second level, then add more fine-grained levels if necessary. Adjust `project.low` and `project.high` to the relevant feature size if needed (which may get smaller in finer levels). If the moving volume warps too much, consider larger blocks / fewer levels. Otherwise, increase `smooth.sigmas`, reduce repeats, or reduce `block_stride` to 0.5 if you can afford the increase in memory footprint and compute time. You may also want to provide `register_volumes` with a callback function (see [`register_volumes`](https://danionella.github.io/warpfield/warpfield/register.html#register_volumes) and tip below) to observe each level and repeats of the registration process. It is very helpful for troubleshooting and for reducing compute time by adjusting the number of levels and repeats to the necessary minimum.
 
 > [!TIP]
 > Generating videos of the registration process:
