@@ -26,7 +26,8 @@ from .ndimage import (
     soften_edges,
 )
 
-ArrayType = Union[np.ndarray, cp.ndarray]
+_ArrayType = Union[np.ndarray, cp.ndarray]
+_ScalarType = Union[int, float, np.number]
 
 
 class WarpMap:
@@ -550,8 +551,8 @@ class Projector(BaseModel):
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
-    low: Union[float, List[float]] = 0.5
-    high: Union[float, List[float]] = 10.0
+    low: Union[_ScalarType, List[_ScalarType]] = 0.5
+    high: Union[_ScalarType, List[_ScalarType]] = 10.0
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
@@ -677,7 +678,7 @@ class LevelConfig(BaseModel):
 
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
-    project: Union[Projector, Callable[[ArrayType, int], ArrayType]] = Projector()
+    project: Union[Projector, Callable[[_ArrayType, int], _ArrayType]] = Projector()
     tukey_ref: Union[float, None] = 0.5
     smooth: Union[Smoother, None] = Smoother()
     affine: bool = False
@@ -694,7 +695,7 @@ class Recipe(BaseModel):
         levels (list): List of LevelConfig objects
     """
 
-    pre_filter: Union[RegFilter, Callable[[ArrayType], ArrayType], None] = RegFilter()
+    pre_filter: Union[RegFilter, Callable[[_ArrayType], _ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
         LevelConfig(block_size=[-1, -1, -1], repeats=1),  # translation level
         LevelConfig(  # affine level
