@@ -34,28 +34,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # - uses: mamba-org/setup-micromamba@v2
-      #   with:
-      #     environment-file: environment.yml
-      #     environment-name: tests
-      #     init-shell: >-
-      #       bash
-      #       powershell
-      #     cache-environment: true
-      #     post-cleanup: 'all'
-      
-      # - uses: conda-incubator/setup-miniconda@v3
-      #   with:
-      #     channels: conda-forge
-      #     auto-activate-base: false
-      #     activate-environment: tests
-      #     environment-file: environment.yml
-      #     use-mamba: true
-
-      # - name: Install dependencies
-      #   run: |
-      #     conda activate tests
-      #     conda install pytest
+          
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          create-args: >-
+            cuda-toolkit=12
+          environment-name: tests
+          init-shell: >-
+            bash
+            powershell
+          cache-environment: true
+          post-cleanup: 'all'
       
       - name: Install dependencies
         run: |
@@ -64,7 +53,6 @@ jobs:
       - name: Install package
         run: |
           pip install -e .
-          pip install cupy --force-reinstall
 
       # this runs the platform-specific tests declared in tox.ini
       - name: Test with pytest
