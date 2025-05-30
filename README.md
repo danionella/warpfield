@@ -110,7 +110,7 @@ points_pulled = warp_map.pull_coordinates(points) # inverse transformation
 
 ## Command-Line Interface (CLI)
 
-The `warpfield` library provides a command-line interface, allowing you to perform registration directly from the terminal. This is convenient for batch processing once your registration recipe has been optimized. We recommend starting with the Python interface to develop and optimize your recipes interactively. Once you are satisfied with the results, you can use the CLI for batch processing.
+The `warpfield` library provides a command-line interface, allowing you to perform registration directly from the terminal. We recommend starting with the Python interface to develop and optimize your recipes interactively. Once you are satisfied with the results, you can use the CLI for batch processing.
 
 #### Usage
 
