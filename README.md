@@ -97,7 +97,7 @@ points_pulled = warp_map.invert().push_coordinates(points) # inverse transformat
 ``` 
 
 > [!TIP]
-> You can test-run warpfield with [`notebooks/example.ipynb`](https://github.com/danionella/warpfield/blob/main/notebooks/example.ipynb) on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+> You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
 > [!IMPORTANT]
 > Fixed and moving volumes are expected to be of the same voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
