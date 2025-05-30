@@ -64,7 +64,7 @@ jobs:
       - name: Install package
         run: |
           pip install -e .
-          pip install --no-binary cupy cupy --force-reinstall
+          pip install cupy --force-reinstall
 
       # this runs the platform-specific tests declared in tox.ini
       - name: Test with pytest
