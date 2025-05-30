@@ -44,7 +44,6 @@ jobs:
         with:
           create-args: >-
             cupy
-            python=${{ matrix.python-version }}
           environment-name: tests
           init-shell: >-
             bash
