@@ -52,6 +52,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install pytest
+          sudo apt install -y cuda-cudart-12-1 libcublas-12-1 libcusolver-12-1
 
       - name: Install package
         run: |
