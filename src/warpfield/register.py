@@ -27,8 +27,6 @@ from .ndimage import (
 )
 
 _ArrayType = Union[np.ndarray, cp.ndarray]
-_ScalarType = Union[int, float, np.number]
-
 
 class WarpMap:
     """Represents a 3D displacement field
@@ -546,8 +544,8 @@ class Projector(BaseModel):
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
-    low: Union[_ScalarType, List[_ScalarType]] = 0.5
-    high: Union[_ScalarType, List[_ScalarType]] = 10.0
+    low: Union[Union[int, float], List[Union[int, float]]] = 0.5
+    high: Union[Union[int, float], List[Union[int, float]]] = 10.0
     periodic_smooth: bool = False
 
     def __call__(self, vol_blocks, axis):
@@ -636,7 +634,7 @@ class RegFilter(BaseModel):
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
-    soft_edge: Union[_ScalarType, List[_ScalarType]] = 0.0
+    soft_edge: Union[Union[int, float], List[Union[int, float]]] = 0.0
 
     def __call__(self, vol, reg_mask=None):
         """Apply the filter to the volume
