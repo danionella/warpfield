@@ -49,6 +49,7 @@ jobs:
             bash
             powershell
           cache-downloads: true
+          cache-downloads-key: "downloads-${{ runner.os }}-${{ matrix.python-version }}"
           cache-environment: false
           cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
           post-cleanup: 'all'
