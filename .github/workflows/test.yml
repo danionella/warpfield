@@ -49,7 +49,7 @@ jobs:
             bash
             powershell
           cache-downloads: true
-          cache-environment: true
+          cache-environment: false
           cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
           post-cleanup: 'all'
       
