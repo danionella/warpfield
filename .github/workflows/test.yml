@@ -38,8 +38,7 @@ jobs:
       - name: Get cache key for current week and OS
         id: cachekey
         run: |
-          echo "cache_key=env-${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
-          echo "Using key: ${{ steps.cachekey.outputs.cache_key }}"
+          echo "cache_key=${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
 
       - uses: mamba-org/setup-micromamba@v2
         with:
