@@ -641,7 +641,7 @@ class RegFilter(BaseModel):
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
-    soft_edge: Union[float, List[float]] = 0.0
+    soft_edge: Union[_ScalarType, List[_ScalarType]] = 0.0
 
     def __call__(self, vol, reg_mask=None):
         """Apply the filter to the volume
