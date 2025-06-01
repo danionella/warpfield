@@ -9,40 +9,69 @@ __device__ int ravel3d(const int * shape, const int i, const int j, const int k)
     return i * shape[1]*shape[2] + j * shape[2] + k;
 }
 
-__device__ float trilinear_nearest(const float * arr, const int * arr_shape, float x, float y, float z){
-    // Trilinear interpolation for 3D arrays. If the coordinates are out of bounds, clamp them to the nearest valid index.
-    x = fminf(fmaxf(x,0.0f), (float)arr_shape[0]-1.001);
-    y = fminf(fmaxf(y,0.0f), (float)arr_shape[1]-1.001);
-    z = fminf(fmaxf(z,0.0f), (float)arr_shape[2]-1.001);
-    float x0f,y0f,z0f, c00, c01, c10, c11, c0, c1, c;
-    int x1,y1,z1,x0,y0,z0;
+// Extrapolation modes
+#define EXTRAP_NEAREST 0
+#define EXTRAP_ZERO    1
+#define EXTRAP_LINEAR  2
+
+__device__ float trilinear_interp(const float* arr, const int* shape,
+                                  float x, float y, float z, int mode)
+{
+    // Clip to extended range [-1, shape] to limit extrapolation
+    x = fminf(fmaxf(x,-1.0f), (float)shape[0]);
+    y = fminf(fmaxf(y,-1.0f), (float)shape[1]);
+    z = fminf(fmaxf(z,-1.0f), (float)shape[2]);
+
+    float x0f, y0f, z0f;
     float xd = modff(x, &x0f);
     float yd = modff(y, &y0f);
     float zd = modff(z, &z0f);
-    x0 = (int)x0f;
-    y0 = (int)y0f;
-    z0 = (int)z0f;
-    x1 = x0+1;
-    y1 = y0+1;
-    z1 = z0+1;
-    c00 = arr[ravel3d(arr_shape,x0,y0,z0)] * (1-xd) + arr[ravel3d(arr_shape,x1,y0,z0)] * xd;
-    c01 = arr[ravel3d(arr_shape,x0,y0,z1)] * (1-xd) + arr[ravel3d(arr_shape,x1,y0,z1)] * xd;
-    c10 = arr[ravel3d(arr_shape,x0,y1,z0)] * (1-xd) + arr[ravel3d(arr_shape,x1,y1,z0)] * xd;
-    c11 = arr[ravel3d(arr_shape,x0,y1,z1)] * (1-xd) + arr[ravel3d(arr_shape,x1,y1,z1)] * xd;
-    c0 = c00*(1.0f-yd) + c10*yd;
-    c1 = c01*(1.0f-yd) + c11*yd;
-    c = c0*(1.0f-zd) + c1*zd;
-    return c;
+    int x0 = (int)x0f, x1 = x0 + 1;
+    int y0 = (int)y0f, y1 = y0 + 1;
+    int z0 = (int)z0f, z1 = z0 + 1;
+
+    // Flattened 3D index
+    auto ravel3d = [](const int* shape, int x, int y, int z) {
+        return (x * shape[1] + y) * shape[2] + z;
+    };
+
+    // Inline voxel sampling with extrapolation
+    auto fetch = [&](int xi, int yi, int zi) -> float {
+        if (xi >= 0 && xi < shape[0] && yi >= 0 && yi < shape[1] && zi >= 0 && zi < shape[2])
+            return arr[ravel3d(shape, xi, yi, zi)];
+        if (mode == EXTRAP_ZERO) return 0.0f;
+        if (mode == EXTRAP_NEAREST) {
+            xi = max(0, min(shape[0]-1, xi));
+            yi = max(0, min(shape[1]-1, yi));
+            zi = max(0, min(shape[2]-1, zi));
+            return arr[ravel3d(shape, xi, yi, zi)];
+        }
+        if (mode == EXTRAP_LINEAR) {
+            int xc = max(0, min(shape[0]-1, xi));
+            int xn = (xi < 0) ? xc + 1 : (xi >= shape[0]) ? xc - 1 : xc;
+            int yc = max(0, min(shape[1]-1, yi));
+            int yn = (yi < 0) ? yc + 1 : (yi >= shape[1]) ? yc - 1 : yc;
+            int zc = max(0, min(shape[2]-1, zi));
+            int zn = (zi < 0) ? zc + 1 : (zi >= shape[2]) ? zc - 1 : zc;
+            float v0 = arr[ravel3d(shape, xc, yc, zc)];
+            float v1 = arr[ravel3d(shape, xn, yn, zn)];
+            return v0 + (v0 - v1);  // linear extrapolation
+        }
+        return 0.0f;
+    };
+
+    // Trilinear interpolation
+    float c00 = fetch(x0, y0, z0) * (1 - xd) + fetch(x1, y0, z0) * xd;
+    float c01 = fetch(x0, y0, z1) * (1 - xd) + fetch(x1, y0, z1) * xd;
+    float c10 = fetch(x0, y1, z0) * (1 - xd) + fetch(x1, y1, z0) * xd;
+    float c11 = fetch(x0, y1, z1) * (1 - xd) + fetch(x1, y1, z1) * xd;
+
+    float c0 = c00 * (1 - yd) + c10 * yd;
+    float c1 = c01 * (1 - yd) + c11 * yd;
+
+    return c0 * (1 - zd) + c1 * zd;
 }
 
-__device__ float trilinear_fill(const float * arr, const int * arr_shape, float x, float y, float z){
-    // If the coordinates are out of bounds, return 0.0f. Otherwise, use trilinear interpolation.
-    if (x < 0.0f || x > arr_shape[0] - 1.001f ||
-        y < 0.0f || y > arr_shape[1] - 1.001f ||
-        z < 0.0f || z > arr_shape[2] - 1.001f)
-        return 0.0f;  
-    return trilinear_nearest(arr, arr_shape, x, y, z);
-}
 
 extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr_shape, const float * disp_field0, const float * disp_field1, const float * disp_field2, const int * disp_field_shape, const float * disp_scale, const float * disp_offset, float * out, const int * out_shape) {
     float x,y,z,d0,d1,d2;
@@ -52,12 +81,11 @@ extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr
                 x = (float)i/disp_scale[0]+disp_offset[0];
                 y = (float)j/disp_scale[1]+disp_offset[1];
                 z = (float)k/disp_scale[2]+disp_offset[2];
-                d0 = trilinear_nearest(disp_field0, disp_field_shape, x, y, z);
-                d1 = trilinear_nearest(disp_field1, disp_field_shape, x, y, z);
-                d2 = trilinear_nearest(disp_field2, disp_field_shape, x, y, z);
+                d0 = trilinear_interp(disp_field0, disp_field_shape, x, y, z, EXTRAP_LINEAR);
+                d1 = trilinear_interp(disp_field1, disp_field_shape, x, y, z, EXTRAP_LINEAR);
+                d2 = trilinear_interp(disp_field2, disp_field_shape, x, y, z, EXTRAP_LINEAR);
                 int idx = ravel3d(out_shape, i,j,k);
-                //out[idx] = trilinear_nearest(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2);
-                out[idx] = trilinear_fill(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2);
+                out[idx] = trilinear_interp(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2, EXTRAP_ZERO);
             }
         }
     }
