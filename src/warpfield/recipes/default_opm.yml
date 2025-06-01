@@ -9,7 +9,7 @@ levels:
   - block_size: [-1, -1, -1] 
     repeats: 1
   # affine level. keep block size. Maybe adjust project low/high sigmas
-  - block_size: [-4, -4, -4]
+  - block_size: [-2, -2, -2]
     project:
       low: 2.0
       high: 10.0
