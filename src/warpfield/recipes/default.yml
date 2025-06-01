@@ -9,7 +9,7 @@ levels:
   - block_size: [-1, -1, -1] 
     repeats: 1
   # affine level with largest possible blocks (adjust repeats and possibly project low/high):
-  - block_size: [-2, -2, -2] # need at least 4 blocks along each axis for affine fit
+  - block_size: [-2, -2, -2] # need at least 2 blocks along each axis for affine fit
     project:
       low: 2.0
       high: 10.0
