@@ -22,13 +22,15 @@ __device__ float trilinear_interp(const float* arr, const int* shape,
     y = fminf(fmaxf(y,-1.0f), (float)shape[1]);
     z = fminf(fmaxf(z,-1.0f), (float)shape[2]);
 
-    float x0f, y0f, z0f;
-    float xd = modff(x, &x0f);
-    float yd = modff(y, &y0f);
-    float zd = modff(z, &z0f);
-    int x0 = (int)x0f, x1 = x0 + 1;
-    int y0 = (int)y0f, y1 = y0 + 1;
-    int z0 = (int)z0f, z1 = z0 + 1;
+    int x0 = __float2int_rd(x);
+    int y0 = __float2int_rd(y);
+    int z0 = __float2int_rd(z);
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+    int z1 = z0 + 1;
+    float xd = x - (float)x0;  // now in [0, 1] when x in [x0, x0+1]
+    float yd = y - (float)y0;
+    float zd = z - (float)z0;
 
     // Flattened 3D index
     auto ravel3d = [](const int* shape, int x, int y, int z) {
