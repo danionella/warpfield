@@ -690,9 +690,9 @@ class Recipe(BaseModel):
 
     pre_filter: Union[RegFilter, Callable[[_ArrayType], _ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
-        LevelConfig(block_size=[-1, -1, -1], repeats=1),  # translation level
+        LevelConfig(block_size=[-1, -1, -1], repeats=3),  # translation level
         LevelConfig(  # affine level
-            block_size=[-4, -4, -4],
+            block_size=[-2, -2, -2],
             repeats=10,
             affine=True,
             median_filter=False,
