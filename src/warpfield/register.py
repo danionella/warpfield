@@ -409,7 +409,7 @@ class RegistrationPyramid:
             tmp = np.r_[ref_vol.shape] // -block_size
             block_size[block_size < 0] = tmp[block_size < 0]
             if isinstance(recipe.levels[i].block_stride, (int, float)):
-                block_stride = np.round(block_size * recipe.levels[i].block_stride).astype("int")
+                block_stride = (block_size * recipe.levels[i].block_stride).astype("int")
             else:
                 block_stride = np.array(recipe.levels[i].block_stride)
             self.mappers.append(
@@ -693,6 +693,7 @@ class Recipe(BaseModel):
         LevelConfig(block_size=[-1, -1, -1], repeats=3),  # translation level
         LevelConfig(  # affine level
             block_size=[-2, -2, -2],
+            block_stride=0.5,
             repeats=10,
             affine=True,
             median_filter=False,
