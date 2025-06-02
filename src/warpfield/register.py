@@ -693,6 +693,7 @@ class Recipe(BaseModel):
         LevelConfig(block_size=[-1, -1, -1], repeats=3),  # translation level
         LevelConfig(  # affine level
             block_size=[-2, -2, -2],
+            block_stride=0.5,
             repeats=10,
             affine=True,
             median_filter=False,
