@@ -17,8 +17,9 @@ from warpfield.utils import load_data
 try:
     import cupy as cp
 
-    _ = cp.cuda.runtime.getDeviceCount()  # Check if any GPU devices are available
+    num_gpus = cp.cuda.runtime.getDeviceCount()  # Check if any GPU devices are available
     gpu_available = True
+    gpu_id = 0
 except (ImportError, cp.cuda.runtime.CUDARuntimeError):
     gpu_available = False
     warnings.warn("No GPU detected. Skipping GPU tests.")
@@ -81,7 +82,7 @@ def test_register_volumes():
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift
     recipe = warpfield.Recipe.from_yaml("default.yml")
 
-    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False,gpu_id=gpu_id)
 
     assert registered.shape == fixed.shape, "Registered volume shape mismatch."
     assert (
@@ -122,6 +123,8 @@ def test_cli(tmp_path):
             recipe_path,
             "--output",
             str(output_path),
+            "--gpu_id",
+            str(gpu_id) 
         ],
         capture_output=True,
         text=True,

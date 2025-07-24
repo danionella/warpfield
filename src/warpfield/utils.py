@@ -119,7 +119,7 @@ def load_data(file_path: str):
         raise ValueError(f"Unsupported file type: {file_path}")
 
 
-def create_rgb_video(fn, reference, moving, fps=10, quality=9):
+def create_rgb_video(fn, reference, moving, fps=10, quality=9, gpu_id=0):
     """
     Create an RGB video from three separate channels (R, G, B).
 
@@ -127,6 +127,7 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
         fn (str): Filename for the output video.
         reference (ndarray): 2D stationary reference image data
         moving (ndarray): 3D moving image data
+        gpu_id (int): GPU ID to use for the operation.
 
 
     Returns:
@@ -140,22 +141,23 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
             + "Please install them via 'conda install imageio imageio-ffmpeg'"
         )
 
-    rgb = np.zeros((*moving.shape, 3), dtype="float32")
-    rgb[..., 0] = reference[None]
-    rgb[..., 1] = moving
-    rgb[..., 2] = moving * 0.5 + reference[None] * 0.5
+    with cp.cuda.Device(gpu_id):
+        rgb = np.zeros((*moving.shape, 3), dtype="float32")
+        rgb[..., 0] = reference[None]
+        rgb[..., 1] = moving
+        rgb[..., 2] = moving * 0.5 + reference[None] * 0.5
 
-    # clip to shape divisible by 2
-    rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
+        # clip to shape divisible by 2
+        rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
 
-    vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
-    try: 
-        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
-    except Exception:
-        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
+        vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
+        try: 
+            imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
+        except Exception:
+            imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
 
 
-def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
+def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2], gpu_id=0):
     """
     Generate 3 maximum intensity projections (MIPs) of a 3D array and tile them in a typical MIP view layout,
     rearranged and transposed according to the specified axes.
@@ -165,55 +167,58 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
         units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
         width (int): The maximum width of the output 2D array.
         axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+        gpu_id (int): GPU ID to use for the operation.
 
     Returns:
         cp.ndarray: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
     """
-    axes = np.array(axes)
-    units_per_voxel = np.array(units_per_voxel)
+    with cp.cuda.Device(gpu_id):
+        axes = np.array(axes)
+        units_per_voxel = np.array(units_per_voxel)
 
-    # Compute the MIPs along the three original axes (z, y, x)
-    mips = [cp.max(data, axis=ax) for ax in range(3)]  # [YX, ZX, ZY]
+        # Compute the MIPs along the three original axes (z, y, x)
+        mips = [cp.max(data, axis=ax) for ax in range(3)]  # [YX, ZX, ZY]
 
-    # Rearrange and transpose the MIPs based on the new axis order
-    reordered_mips = []
-    sizes = []
-    for i, ax in enumerate(axes):
-        mip = mips[ax]
-        ax2d = axes[axes != ax]
-        if np.argsort(ax2d)[0] != 0:
-            mip = mip.T
-        sz = np.array(mip.shape) * units_per_voxel[ax2d]
-        reordered_mips.append(mip)
-        sizes.append(sz)
+        # Rearrange and transpose the MIPs based on the new axis order
+        reordered_mips = []
+        sizes = []
+        for i, ax in enumerate(axes):
+            mip = mips[ax]
+            ax2d = axes[axes != ax]
+            if np.argsort(ax2d)[0] != 0:
+                mip = mip.T
+            sz = np.array(mip.shape) * units_per_voxel[ax2d]
+            reordered_mips.append(mip)
+            sizes.append(sz)
 
-    # Determine the scaling factor to fit within the specified width
-    scale = min(width / (sizes[0][1] + sizes[2][0]), 1 / np.min(units_per_voxel))
+        # Determine the scaling factor to fit within the specified width
+        scale = min(width / (sizes[0][1] + sizes[2][0]), 1 / np.min(units_per_voxel))
 
-    # Resize each MIP to the correct scale
-    def resize_image(image, target_shape):
-        scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
-        return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
+        # Resize each MIP to the correct scale
+        def resize_image(image, target_shape,gpu_id=0):
+            with cp.cuda.Device(gpu_id):
+                scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
+                return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
 
-    resized_mips = [
-        resize_image(mip, (int(size[0] * scale + 0.5), int(size[1] * scale + 0.5)))
-        for mip, size in zip(reordered_mips, sizes)
-    ]
+        resized_mips = [
+            resize_image(mip, (int(size[0] * scale + 0.5), int(size[1] * scale + 0.5)),gpu_id=gpu_id)
+            for mip, size in zip(reordered_mips, sizes)
+        ]
 
-    # Determine the canvas size
-    canvas_height = resized_mips[0].shape[0] + resized_mips[1].shape[0]  # y + z
-    canvas_width = resized_mips[0].shape[1] + resized_mips[2].shape[0]  # x + z
-    canvas = cp.zeros((canvas_height, canvas_width), dtype=data.dtype)
+        # Determine the canvas size
+        canvas_height = resized_mips[0].shape[0] + resized_mips[1].shape[0]  # y + z
+        canvas_width = resized_mips[0].shape[1] + resized_mips[2].shape[0]  # x + z
+        canvas = cp.zeros((canvas_height, canvas_width), dtype=data.dtype)
 
-    # Place the MIPs on the canvas
-    canvas[: resized_mips[0].shape[0], : resized_mips[0].shape[1]] = resized_mips[0]  # YX (top-left)
-    canvas[: resized_mips[2].shape[1], resized_mips[0].shape[1] :] = resized_mips[2].T  # ZY (top-right)
-    canvas[resized_mips[0].shape[0] :, : resized_mips[1].shape[1]] = resized_mips[1]  # ZX (bottom-left)
+        # Place the MIPs on the canvas
+        canvas[: resized_mips[0].shape[0], : resized_mips[0].shape[1]] = resized_mips[0]  # YX (top-left)
+        canvas[: resized_mips[2].shape[1], resized_mips[0].shape[1] :] = resized_mips[2].T  # ZY (top-right)
+        canvas[resized_mips[0].shape[0] :, : resized_mips[1].shape[1]] = resized_mips[1]  # ZX (bottom-left)
 
-    return canvas
+        return canvas
 
 
-def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
+def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2],gpu_id=0):
     """
     Return Callback function to generate MIPs for a given volume.
 
@@ -222,26 +227,29 @@ def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
         units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
         width (int): The maximum width of the output 2D array.
         axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
+        gpu_id (int): GPU ID to use for the operation.
 
     Returns:
         function: A function that takes a 3D cupy volume and returns the MIPs as 2D numpy array.
     """
 
     def wrapped(vol):
-        mips = get_mips(vol, units_per_voxel=units_per_voxel, width=width, axes=axes)
-        mips = mips / vmax
-        return mips.get()
+        with cp.cuda.Device(gpu_id):
+            mips = get_mips(vol, units_per_voxel=units_per_voxel, width=width, axes=axes,gpu_id=gpu_id)
+            mips = mips / vmax
+            return mips.get()
 
     return wrapped
 
 
-def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1, 1], width=4096, vmax=1, thick=5):
+def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1, 1], width=4096, vmax=1, thick=5, gpu_id=0):
     """
     Create a mosaic of slices from a 3D dataset along a specified axis, adjusting for voxel aspect ratio.
 
     Args:
         num_slices (int): The number of slices to include in the mosaic.
         axis (int): The axis along which to extract slices.
+        gpu_id (int): GPU ID to use for the operation.
 
 
     Returns:
@@ -253,21 +261,22 @@ def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1
         raise ImportError("The 'scikit-image' package is required to create mosaics. Please install it.")
 
     def wrapped(data):
-        data = cp.array(data, copy=False, dtype="float32")
-        slice_indices = np.linspace(0, data.shape[axis] - 1, num_slices + 2, dtype=int)[1:-1]
+        with cp.cuda.Device(gpu_id):
+            data = cp.array(data, copy=False, dtype="float32")
+            slice_indices = np.linspace(0, data.shape[axis] - 1, num_slices + 2, dtype=int)[1:-1]
 
-        slices = []
-        for i in range(len(slice_indices)):
-            slices.append(cp.take(data, slice_indices[i] + cp.arange(-thick // 2, thick // 2), axis=axis).max(axis))
-        slices = cp.array(slices)
-        aspect_ratio = np.array([units_per_voxel[i] for i in range(3) if i != axis])
-        slices = slices.get()
-        mosaic = montage(slices)
-        zoom_factors = min(width / mosaic.shape[1], 1) * aspect_ratio / aspect_ratio[1]
-        mosaic = cupyx.scipy.ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax
-        if transpose:
-            mosaic = mosaic.T
-        return mosaic.get()
+            slices = []
+            for i in range(len(slice_indices)):
+                slices.append(cp.take(data, slice_indices[i] + cp.arange(-thick // 2, thick // 2), axis=axis).max(axis))
+            slices = cp.array(slices)
+            aspect_ratio = np.array([units_per_voxel[i] for i in range(3) if i != axis])
+            slices = slices.get()
+            mosaic = montage(slices)
+            zoom_factors = min(width / mosaic.shape[1], 1) * aspect_ratio / aspect_ratio[1]
+            mosaic = cupyx.scipy.ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax
+            if transpose:
+                mosaic = mosaic.T
+            return mosaic.get()
 
     return wrapped
 
