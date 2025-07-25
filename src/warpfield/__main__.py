@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import h5py
 import hdf5plugin
+import cupy as cp
 
 from .utils import load_data
 from .register import register_volumes, Recipe
@@ -35,6 +36,8 @@ def main():
     )
     args = parser.parse_args()
     output_path = args.output or f"{os.path.splitext(args.moving)[0]}_registered.h5"
+
+    cp.cuda.Device(args.gpu_id).use()
 
     # load
     logging.info(f"Loading fixed image from {args.fixed}...")

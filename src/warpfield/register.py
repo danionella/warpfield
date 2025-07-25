@@ -102,7 +102,7 @@ class WarpMap:
             coeff = cp.linalg.lstsq(a, b, rcond=None)[0]
             ix_out = cp.indices(warp_field_shape[1:]).reshape(3, -1).T * block_stride + block_size / 2
             linfit = ((ix_out @ (coeff[:3] - cp.eye(3))) + coeff[3]).T.reshape(warp_field_shape)
-            return WarpMap(linfit, block_size, block_stride, self.ref_shape, self.mov_shape), coeff
+            return WarpMap(linfit, block_size, block_stride, self.ref_shape, self.mov_shape, self.gpu_id), coeff
 
     def median_filter(self):
         """Apply median filter to the displacement field
@@ -112,7 +112,7 @@ class WarpMap:
         """
         with cp.cuda.Device(self.gpu_id):
             warp_field = cupyx.scipy.ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
-            return WarpMap(warp_field, self.block_size, self.block_stride, self.ref_shape, self.mov_shape)
+            return WarpMap(warp_field, self.block_size, self.block_stride, self.ref_shape, self.mov_shape, self.gpu_id)
 
     def resize_to(self, target):
         """Resize to target WarpMap, using linear interpolation
@@ -149,7 +149,7 @@ class WarpMap:
                     for i in range(3)
                 ]
             )
-            return WarpMap(dm_r, t_bsz, t_bst, self.ref_shape, self.mov_shape)
+            return WarpMap(dm_r, t_bsz, t_bst, self.ref_shape, self.mov_shape, self.gpu_id)
 
     def chain(self, target):
         """Chain displacement maps
@@ -164,7 +164,7 @@ class WarpMap:
             indices = cp.indices(target.warp_field.shape[1:])
             warp_field = self.warp_field.copy()
             warp_field += target.warp_field
-            return WarpMap(warp_field, target.block_size, target.block_stride, self.ref_shape, self.mov_shape)
+            return WarpMap(warp_field, target.block_size, target.block_stride, self.ref_shape, self.mov_shape, self.gpu_id)
 
     def invert(self, **kwargs):
         """alias for invert_fast method"""
@@ -191,7 +191,7 @@ class WarpMap:
                 inv_field[i] /= num_coords
             inv_field[i][num_coords == 0] = np.nan
             inv_field[i] = infill_nans(inv_field[i], sigma=sigma, truncate=truncate)
-        return WarpMap(inv_field, self.block_size, self.block_stride, self.mov_shape, self.ref_shape)
+        return WarpMap(inv_field, self.block_size, self.block_stride, self.mov_shape, self.ref_shape, self.gpu_id)
 
     def push_coordinates(self, coords, negative_shifts=False):
         """Push voxel coordinates from fixed to moving space.
@@ -397,7 +397,7 @@ class WarpMapper:
                 ).astype("float32")
                 / 2
             )
-            return WarpMap(disp_field, self.block_size, self.block_stride, self.ref_shape, vol.shape)
+            return WarpMap(disp_field, self.block_size, self.block_stride, self.ref_shape, vol.shape, self.gpu_id   )
 
 
 class RegistrationPyramid:
@@ -465,7 +465,9 @@ class RegistrationPyramid:
             vol = cp.array(vol, "float32", copy=False, order="C")
             offsets = (cp.array(vol.shape) - cp.array(self.ref_shape)) / 2
             warp_map = WarpMap(offsets[:, None, None, None], cp.ones(3), cp.ones(3), self.ref_shape, vol.shape,gpu_id=self.gpu_id)
+            warp_map.warp_field = cp.array(warp_map.warp_field, dtype="float32")
             warp_map = warp_map.resize_to(self.mappers[-1])
+            warp_map.warp_field = cp.array(warp_map.warp_field, dtype="float32")
             callback_output = []
             vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
             vol_tmp = cp.zeros(self.ref_shape, dtype="float32", order="C")
@@ -486,6 +488,7 @@ class RegistrationPyramid:
                         vol_tmp, smooth_func=self.recipe.levels[self.mapper_ix[k]].smooth  # * self.reg_mask,
                     )
                     wm.warp_field *= self.recipe.levels[self.mapper_ix[k]].update_rate
+                    wm.warp_field = cp.array(wm.warp_field, dtype="float32")
                     if self.recipe.levels[self.mapper_ix[k]].median_filter:
                         wm = wm.median_filter()
                     if self.recipe.levels[self.mapper_ix[k]].affine:
@@ -536,23 +539,23 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    with cp.cuda.Device(gpu_id):
-        recipe.model_validate(recipe.model_dump())
-        reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask, gpu_id=gpu_id)
-        registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
-        del reg
-        gc.collect()
-        cp.fft.config.get_plan_cache().clear()
+    cp.cuda.Device(gpu_id).use()
+    recipe.model_validate(recipe.model_dump())
+    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask, gpu_id=gpu_id)
+    registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
+    del reg
+    gc.collect()
+    cp.fft.config.get_plan_cache().clear()
 
-        if video_path is not None:
-            try:
-                assert cbout[0].ndim == 2, "Callback output must be a 2D array"
-                ref = callback(recipe.pre_filter(ref))
-                vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
-                create_rgb_video(video_path, ref / vmax, np.array(cbout) / vmax, fps=10, gpu_id=gpu_id)
-            except (ValueError, AssertionError) as e:
-                warnings.warn(f"Video generation failed with error: {e}")
-        return registered_vol, warp_map, cbout
+    if video_path is not None:
+        try:
+            assert cbout[0].ndim == 2, "Callback output must be a 2D array"
+            ref = callback(recipe.pre_filter(ref))
+            vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
+            create_rgb_video(video_path, ref / vmax, np.array(cbout) / vmax, fps=10, gpu_id=gpu_id)
+        except (ValueError, AssertionError) as e:
+            warnings.warn(f"Video generation failed with error: {e}")
+    return registered_vol, warp_map, cbout
 
 
 class Projector(BaseModel):
