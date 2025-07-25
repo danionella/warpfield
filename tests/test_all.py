@@ -19,7 +19,7 @@ try:
 
     num_gpus = cp.cuda.runtime.getDeviceCount()  # Check if any GPU devices are available
     gpu_available = True
-    gpu_id = 0
+    gpu_ids = list(range(num_gpus))
 except (ImportError, cp.cuda.runtime.CUDARuntimeError):
     gpu_available = False
     warnings.warn("No GPU detected. Skipping GPU tests.")
@@ -76,7 +76,8 @@ def test_import_tiff(tmp_path):
 
 
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
-def test_register_volumes():
+@pytest.mark.parametrize("gpu_id", gpu_ids)
+def test_register_volumes(gpu_id):
     """Test the register_volumes function."""
     fixed = np.random.rand(256, 256, 256).astype("float32")
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift
@@ -92,7 +93,8 @@ def test_register_volumes():
 
 
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
-def test_cli(tmp_path):
+@pytest.mark.parametrize("gpu_id", gpu_ids)
+def test_cli(tmp_path,gpu_id):
     """Test the CLI for registering volumes."""
     fixed = np.random.rand(256, 256, 256).astype("float32")
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift

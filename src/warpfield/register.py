@@ -40,12 +40,13 @@ class WarpMap:
     """
 
     def __init__(self, warp_field, block_size, block_stride, ref_shape, mov_shape, gpu_id=0):
-        self.warp_field = cp.array(warp_field, dtype="float32")
-        self.block_size = cp.array(block_size, dtype="float32")
-        self.block_stride = cp.array(block_stride, dtype="float32")
-        self.ref_shape = ref_shape
-        self.mov_shape = mov_shape
         self.gpu_id = gpu_id
+        with cp.cuda.Device(self.gpu_id):
+            self.warp_field = cp.array(warp_field, dtype="float32")
+            self.block_size = cp.array(block_size, dtype="float32")
+            self.block_stride = cp.array(block_stride, dtype="float32")
+            self.ref_shape = ref_shape
+            self.mov_shape = mov_shape
 
     def warp(self, vol, out=None):
         """Apply the warp to a volume. Can be thought of as pulling the moving volume to the fixed volume space.
@@ -62,7 +63,7 @@ class WarpMap:
             if out is None:
                 out = cp.zeros(self.ref_shape, dtype="float32", order="C")
             vol_out = warp_volume(
-                vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out
+                vol, self.warp_field, self.block_stride, cp.array(-self.block_size / self.block_stride / 2), out=out, gpu_id=self.gpu_id
             )
             return vol_out
 
@@ -296,6 +297,8 @@ class WarpMapper:
         self, ref_vol, block_size, block_stride=None, proj_method=None, subpixel=4, epsilon=1e-6, tukey_alpha=0.5, gpu_id=0
     ):
         self.proj_method = proj_method
+        if hasattr(self.proj_method, "gpu_id"):
+            self.proj_method.gpu_id = gpu_id
         self.plan_rev = [None, None, None]
         self.subpixel = subpixel
         self.epsilon = epsilon
@@ -311,7 +314,7 @@ class WarpMapper:
             ft = lambda arr: cp.fft.rfftn(arr, axes=(-2, -1))
             block_size = np.array(block_size)
             block_stride = block_size if block_stride is None else np.array(block_stride)
-            ref_blocks = sliding_block(cp.array(ref_vol), block_size=block_size, block_stride=block_stride)
+            ref_blocks = sliding_block(cp.array(ref_vol), block_size=block_size, block_stride=block_stride,gpu_id=self.gpu_id)
             self.blocks_shape = ref_blocks.shape
             ref_blocks_proj = [self.proj_method(ref_blocks, axis=iax) for iax in [-3, -2, -1]]
             if self.tukey_alpha < 1:
@@ -343,6 +346,9 @@ class WarpMapper:
         Returns:
             WarpMap
         """
+        if smooth_func is not None and hasattr(smooth_func, "gpu_id"):
+            smooth_func.gpu_id = self.gpu_id
+
         with cp.cuda.Device(self.gpu_id):
             vol_blocks = sliding_block(vol, block_size=self.block_size, block_stride=self.block_stride,gpu_id=self.gpu_id)
             vol_blocks_proj = [self.proj_method(vol_blocks, axis=iax) for iax in [-3, -2, -1]]
@@ -680,7 +686,7 @@ class RegFilter(BaseModel):
             if reg_mask is not None:
                 vol *= cp.array(reg_mask, dtype="float32", copy=False)
             if self.dog:
-                vol = dogfilter(vol, self.low, self.high, mode="reflect")
+                vol = dogfilter(vol, self.low, self.high, mode="reflect", gpu_id=self.gpu_id)
             return vol
 
 
