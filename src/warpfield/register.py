@@ -11,6 +11,7 @@ import cupyx
 import cupyx.scipy.ndimage
 from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
+import h5py
 
 from .warp import warp_volume
 from .utils import create_rgb_video, mips_callback
@@ -271,6 +272,50 @@ class WarpMap:
             f"transformation: {str(self.mov_shape)} --> {str(self.ref_shape)}"
         )
         return info
+
+    def to_h5(self, h5_path, group="warp_map", compression="gzip", overwrite=True):
+        """
+        Save this WarpMap to an HDF5 file.
+
+        Args:
+            h5_path (str or os.PathLike): Path to the HDF5 file.
+            group (str): Group path inside the HDF5 file to store the WarpMap (created if missing).
+            compression (str or None): Dataset compression (e.g., 'gzip', None).
+            overwrite (bool): If True, overwrite existing datasets/attrs inside the group.
+        """
+        with h5py.File(h5_path, "a") as f:
+            if overwrite and (group not in (None, "", "/")) and (group in f):
+                del f[group]
+            if (not overwrite) and (group in f):
+                raise ValueError(f"Group '{group}' already exists in {h5_path}. Set 'overwrite=True' to overwrite it.")
+            grp = f.require_group(group) if group not in (None, "", "/") else f
+            grp.create_dataset("warp_field", data=self.warp_field.get(), compression=compression)
+            grp.create_dataset("block_size", data=self.block_size.get())
+            grp.create_dataset("block_stride", data=self.block_stride.get())
+            grp.create_dataset("ref_shape", data=np.array(self.ref_shape, dtype="int64"))
+            grp.create_dataset("mov_shape", data=np.array(self.mov_shape, dtype="int64"))
+            grp.attrs["class"] = "WarpMap"
+
+    @classmethod
+    def from_h5(cls, h5_path, group="warp_map"):
+        """
+        Load a WarpMap from an HDF5 file.
+
+        Args:
+            h5_path (str or os.PathLike): Path to the HDF5 file.
+            group (str): Group path inside the HDF5 file where the WarpMap is stored.
+
+        Returns:
+            WarpMap: The loaded WarpMap object.
+        """
+        with h5py.File(h5_path, "r") as f:
+            grp = f[group]
+            warp_field = grp["warp_field"][:]
+            block_size = grp["block_size"][:]
+            block_stride = grp["block_stride"][:]
+            ref_shape = tuple(grp["ref_shape"][:].tolist())
+            mov_shape = tuple(grp["mov_shape"][:].tolist())
+        return cls(warp_field, block_size, block_stride, ref_shape, mov_shape)
 
 
 class WarpMapper:
