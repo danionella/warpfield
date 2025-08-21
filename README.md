@@ -74,7 +74,7 @@ pip install --no-deps -e .
 ```python
 import warpfield 
 
-# 1. Load data (note: the two volumes are expected to be of the same array shape and resolution)
+# 1. Load data (note: the two volumes are expected to be of the same resolution)
 vol_ref, _ = warpfield.load_data("reference_volume.npy")
 vol_mov, _ = warpfield.load_data("moving_volume.npy")
 
