@@ -1,9 +1,8 @@
 import numpy as np
-import cupy as cp
+from ._cupy_utils import cupy as cp, require_cupy
 
-
-_warp_volume_kernel = cp.RawKernel(
-    r"""
+# Kernel definition as a string
+_WARP_VOLUME_KERNEL_CODE = r"""
 
 __device__ int ravel3d(const int * shape, const int i, const int j, const int k){
     return i * shape[1]*shape[2] + j * shape[2] + k;
@@ -92,9 +91,18 @@ extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr
         }
     }
 }
-""",
-    "warp_volume_kernel",
-)
+"""
+
+# Global variable to store the compiled kernel
+_warp_volume_kernel = None
+
+def _get_warp_volume_kernel():
+    """Get the compiled warp volume kernel, compiling it if necessary."""
+    global _warp_volume_kernel
+    if _warp_volume_kernel is None:
+        require_cupy()  # Ensure CuPy is available
+        _warp_volume_kernel = cp.RawKernel(_WARP_VOLUME_KERNEL_CODE, "warp_volume_kernel")
+    return _warp_volume_kernel
 
 
 def warp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8]):
@@ -119,13 +127,18 @@ def warp_volume(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8
     Returns:
         array_like: Warped 3D volume.
     """
+    require_cupy()  # This function requires CuPy
+    
     was_numpy = isinstance(vol, np.ndarray)
     vol = cp.array(vol, dtype="float32", copy=False, order="C")
     if out is None:
         out = cp.zeros(vol.shape, dtype=vol.dtype)
     assert out.dtype == cp.dtype("float32")
     bpg = np.ceil(np.array(out.shape) / tpb).astype("int").tolist()  # blocks per grid
-    _warp_volume_kernel(
+    
+    # Get the kernel (compiles on first use)
+    kernel = _get_warp_volume_kernel()
+    kernel(
         tuple(bpg),
         tuple(tpb),
         (

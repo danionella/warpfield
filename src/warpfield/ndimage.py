@@ -1,10 +1,14 @@
-import cupyx.scipy.signal.windows
 import numpy as np
-import cupy as cp
-import cupyx
 import scipy.ndimage
-import cupyx.scipy.ndimage
-import cupyx.scipy.signal
+
+from ._cupy_utils import (
+    cupy as cp,
+    cupyx_scipy_ndimage,
+    cupyx_scipy_signal,
+    cupyx_scipy_signal_windows,
+    is_cupy_available,
+    require_cupy
+)
 
 
 def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect"):
@@ -23,10 +27,16 @@ def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect"):
         cupyx.scipy.ndimage.gaussian_filter
         skimage.filters.difference_of_gaussians
     """
+    if not is_cupy_available():
+        # Fall back to CPU implementation
+        out = scipy.ndimage.gaussian_filter(vol, sigma_low, mode=mode)
+        out = out - scipy.ndimage.gaussian_filter(vol, sigma_high, mode=mode)
+        return out.astype("float32")
+    
     in_module = vol.__class__.__module__
     vol = cp.array(vol, "float32", copy=False)
-    out = cupyx.scipy.ndimage.gaussian_filter(vol, sigma_low, mode=mode)
-    out -= cupyx.scipy.ndimage.gaussian_filter(vol, sigma_high, mode=mode)
+    out = cupyx_scipy_ndimage.gaussian_filter(vol, sigma_low, mode=mode)
+    out -= cupyx_scipy_ndimage.gaussian_filter(vol, sigma_high, mode=mode)
     if in_module == "numpy":
         out = out.get()
     return out
@@ -43,6 +53,8 @@ def periodic_smooth_decomposition_nd_rfft(img):
     Returns:
         cupy.ndarray: periodic component
     """
+    require_cupy()  # This function requires CuPy
+    
     # compute border-difference
     B = cp.zeros_like(img)
     B[..., 0, :] = img[..., -1, :] - img[..., 0, :]
@@ -217,8 +229,8 @@ def sliding_block(data, block_size=100, block_stride=1):
 
 
 def upsampled_dft_rfftn(
-    data: cp.ndarray, upsampled_region_size, upsample_factor: int = 1, axis_offsets=None
-) -> cp.ndarray:
+    data, upsampled_region_size, upsample_factor: int = 1, axis_offsets=None
+):
     """
     Performs an upsampled inverse DFT on a small region around given offsets,
     taking as input the output of cupy.fft.rfftn (real-to-complex FFT).
@@ -239,6 +251,8 @@ def upsampled_dft_rfftn(
         A complex-valued array of shape (..., m, n) containing the
         upsampled inverse DFT patch.
     """
+    require_cupy()  # This function requires CuPy
+    
     if data.ndim < 2:
         raise ValueError("Input must have at least 2 dimensions")
     *batch_shape, M, Nf = data.shape
@@ -323,7 +337,7 @@ def zoom_chop_pad(
             coords[i] *= -1
             coords[i] += arr.shape[i] - 1
         coords[i] -= shift[i]
-    result = cupyx.scipy.ndimage.map_coordinates(arr, coords, order=1, mode="constant", cval=cval)
+    result = cupyx_scipy_ndimage.map_coordinates(arr, coords, order=1, mode="constant", cval=cval)
 
     if was_numpy:
         result = result.get()
@@ -341,6 +355,8 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
     Returns:
         np.ndarray or cp.ndarray: The transformed array. Dtype is float32.
     """
+    require_cupy()  # This function requires CuPy
+    
     was_numpy = isinstance(arr, np.ndarray)
     input_dtype = arr.dtype
     arr = cp.array(arr, dtype="float32", copy=copy)
@@ -352,7 +368,7 @@ def soften_edges(arr, soft_edge=(0, 0, 0), copy=True):
         if soft_edge[i] > 0:
             alpha = 2 * soft_edge[i] / arr.shape[i]
             alpha = np.clip(alpha, 0, 1)
-            win = cupyx.scipy.signal.windows.tukey(arr.shape[i], alpha)
+            win = cupyx_scipy_signal.windows.tukey(arr.shape[i], alpha)
             arr *= cp.moveaxis(win[:, None, None], 0, i)
 
     arr = arr.astype(input_dtype, copy=False)
@@ -373,9 +389,11 @@ def zoom(arr, zoom_factors, order=1, mode="constant"):
     Returns:
         np.ndarray or cp.ndarray: The zoomed array.
     """
+    require_cupy()  # This function requires CuPy
+    
     was_numpy = isinstance(arr, np.ndarray)
     arr = cp.array(arr, dtype="float32", copy=False, order="C")
-    out = cupyx.scipy.ndimage.zoom(arr, zoom_factors, order=order)
+    out = cupyx_scipy_ndimage.zoom(arr, zoom_factors, order=order)
     if was_numpy:
         out = out.get()
     return out
@@ -537,7 +555,7 @@ def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0, in
     Returns:
         ndarray: deconvolved image
     """
-    conv_with_gauss = lambda x: cupyx.scipy.ndimage.gaussian_filter(x, sigmas)
+    conv_with_gauss = lambda x: cupyx_scipy_ndimage.gaussian_filter(x, sigmas)
     out = richardson_lucy_generic(
         img, conv_with_gauss, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess
     )
@@ -567,7 +585,7 @@ def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5, epsilon=1e-3,
     gw01 /= gw01.sum()
     gw2 = gw.sum(axis=(0, 1))[None, None, :]
     gw2 /= gw2.sum()
-    conv_shear = lambda vol: cupyx.scipy.ndimage.convolve(cupyx.scipy.ndimage.convolve(vol, gw01), gw2)
+    conv_shear = lambda vol: cupyx_scipy_ndimage.convolve(cupyx_scipy_ndimage.convolve(vol, gw01), gw2)
     out = richardson_lucy_generic(
         img, conv_shear, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess
     )

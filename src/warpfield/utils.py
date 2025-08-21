@@ -3,11 +3,15 @@ from functools import partial
 import io
 
 import numpy as np
-import cupy as cp
-import cupyx.scipy.ndimage
-
 import h5py
 import hdf5plugin
+
+from ._cupy_utils import (
+    cupy as cp,
+    cupyx_scipy_ndimage,
+    is_cupy_available,
+    require_cupy
+)
 
 
 def load_data(file_path: str):
@@ -169,6 +173,8 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
     Returns:
         cp.ndarray: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
     """
+    require_cupy()  # This function requires CuPy
+    
     axes = np.array(axes)
     units_per_voxel = np.array(units_per_voxel)
 
@@ -193,7 +199,7 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
     # Resize each MIP to the correct scale
     def resize_image(image, target_shape):
         scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
-        return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
+        return cupyx_scipy_ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
 
     resized_mips = [
         resize_image(mip, (int(size[0] * scale + 0.5), int(size[1] * scale + 0.5)))
@@ -264,7 +270,7 @@ def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1
         slices = slices.get()
         mosaic = montage(slices)
         zoom_factors = min(width / mosaic.shape[1], 1) * aspect_ratio / aspect_ratio[1]
-        mosaic = cupyx.scipy.ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax
+        mosaic = cupyx_scipy_ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax
         if transpose:
             mosaic = mosaic.T
         return mosaic.get()

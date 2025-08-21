@@ -1,20 +1,26 @@
+from __future__ import annotations
+
 import warnings
 import gc
 import pathlib
 import os
-from typing import List, Union, Callable
+from typing import List, Union, Callable, TYPE_CHECKING
 
 import numpy as np
 import scipy.signal
-import cupy as cp
-import cupyx
-import cupyx.scipy.ndimage
 from pydantic import BaseModel, ValidationError
 from tqdm.auto import tqdm
 import h5py
 
 from .warp import warp_volume
 from .utils import create_rgb_video, mips_callback
+from ._cupy_utils import (
+    cupy as cp,
+    cupyx_scipy_ndimage,
+    cupyx_scipy_fft,
+    is_cupy_available,
+    require_cupy
+)
 from .ndimage import (
     accumarray,
     dogfilter,
@@ -27,7 +33,13 @@ from .ndimage import (
     soften_edges,
 )
 
-_ArrayType = Union[np.ndarray, cp.ndarray]
+if TYPE_CHECKING:
+    # Import CuPy for type checking only
+    import cupy as cp_typing
+    _ArrayType = Union[np.ndarray, cp_typing.ndarray]
+else:
+    # At runtime, use a generic type alias that won't cause import errors
+    _ArrayType = Union[np.ndarray, object]
 
 class WarpMap:
     """Represents a 3D displacement field
@@ -107,7 +119,7 @@ class WarpMap:
         Returns:
             WarpMap: new WarpMap with median filtered displacement field
         """
-        warp_field = cupyx.scipy.ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
+        warp_field = cupyx_scipy_ndimage.median_filter(self.warp_field, size=[1, 3, 3, 3], mode="nearest")
         return WarpMap(warp_field, self.block_size, self.block_stride, self.ref_shape, self.mov_shape)
 
     def resize_to(self, target):
@@ -137,7 +149,7 @@ class WarpMap:
         ix = (ix * t_bst[:, None] + (t_bsz - self.block_size)[:, None] / 2) / self.block_stride[:, None]
         dm_r = cp.array(
             [
-                cupyx.scipy.ndimage.map_coordinates(cp.array(self.warp_field[i]), ix, mode="nearest", order=1).reshape(
+                cupyx_scipy_ndimage.map_coordinates(cp.array(self.warp_field[i]), ix, mode="nearest", order=1).reshape(
                     t_sh
                 )
                 for i in range(3)
@@ -202,7 +214,7 @@ class WarpMap:
         warp_field = self.warp_field.copy()
         shifts = cp.zeros_like(coords)
         for idim in range(3):
-            shifts[idim] = cupyx.scipy.ndimage.map_coordinates(
+            shifts[idim] = cupyx_scipy_ndimage.map_coordinates(
                 warp_field[idim], coords_blocked, order=1, mode="nearest"
             )
         if negative_shifts:
@@ -359,10 +371,10 @@ class WarpMapper:
                 for i in range(3)
             ]
         self.plan_fwd = [
-            cupyx.scipy.fft.get_fft_plan(ref_blocks_proj[i], axes=(-2, -1), value_type="R2C") for i in range(3)
+            cupyx_scipy_fft.get_fft_plan(ref_blocks_proj[i], axes=(-2, -1), value_type="R2C") for i in range(3)
         ]
         self.ref_blocks_proj_ft_conj = [
-            cupyx.scipy.fft.rfftn(ref_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i]).conj() for i in range(3)
+            cupyx_scipy_fft.rfftn(ref_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i]).conj() for i in range(3)
         ]
         self.block_size = block_size
         self.block_stride = block_stride
@@ -384,12 +396,12 @@ class WarpMapper:
         disp_field = []
         for i in range(3):
             R = (
-                cupyx.scipy.fft.rfftn(vol_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i])
+                cupyx_scipy_fft.rfftn(vol_blocks_proj[i], axes=(-2, -1), plan=self.plan_fwd[i])
                 * self.ref_blocks_proj_ft_conj[i]
             )
             if self.plan_rev[i] is None:
-                self.plan_rev[i] = cupyx.scipy.fft.get_fft_plan(R, axes=(-2, -1), value_type="C2R")
-            xcorr_proj = cp.fft.fftshift(cupyx.scipy.fft.irfftn(R, axes=(-2, -1), plan=self.plan_rev[i]), axes=(-2, -1))
+                self.plan_rev[i] = cupyx_scipy_fft.get_fft_plan(R, axes=(-2, -1), value_type="C2R")
+            xcorr_proj = cp.fft.fftshift(cupyx_scipy_fft.irfftn(R, axes=(-2, -1), plan=self.plan_rev[i]), axes=(-2, -1))
             if smooth_func is not None:
                 xcorr_proj = smooth_func(xcorr_proj, self.block_size)
             xcorr_proj[..., xcorr_proj.shape[-2] // 2, xcorr_proj.shape[-1] // 2] += self.epsilon
@@ -612,7 +624,7 @@ class Projector(BaseModel):
         if self.dog:
             out = dogfilter(out, [0, 0, 0, *low], [0, 0, 0, *high], mode="reflect")
         elif not np.all(np.array(self.low) == 0):
-            out = cupyx.scipy.ndimage.gaussian_filter(out, [0, 0, 0, *low], mode="reflect", truncate=5.0)
+            out = cupyx_scipy_ndimage.gaussian_filter(out, [0, 0, 0, *low], mode="reflect", truncate=5.0)
         if self.normalize > 0:
             out /= cp.sqrt(cp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
         return out
@@ -646,18 +658,18 @@ class Smoother(BaseModel):
             shear_blocks = self.shear * (block_size[1] / block_size[0])
             gw = gausskernel_sheared(self.sigma[:2], shear_blocks, truncate=truncate)
             gw = cp.array(gw[:, :, None, None, None])
-            xcorr_proj = cupyx.scipy.ndimage.convolve(xcorr_proj, gw, mode="constant")
-            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter1d(
+            xcorr_proj = cupyx_scipy_ndimage.convolve(xcorr_proj, gw, mode="constant")
+            xcorr_proj = cupyx_scipy_ndimage.gaussian_filter1d(
                 xcorr_proj, self.sigmas[2], axis=2, mode="constant", truncate=truncate
             )
         else:  # shear is None:
-            xcorr_proj = cupyx.scipy.ndimage.gaussian_filter(
+            xcorr_proj = cupyx_scipy_ndimage.gaussian_filter(
                 xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=truncate
             )
         if self.long_range_ratio is not None:
             xcorr_proj *= 1 - self.long_range_ratio
             xcorr_proj += (
-                cupyx.scipy.ndimage.gaussian_filter(
+                cupyx_scipy_ndimage.gaussian_filter(
                     xcorr_proj, [*np.array(self.sigmas) * 5, 0, 0], mode="constant", truncate=truncate
                 )
                 * self.long_range_ratio
