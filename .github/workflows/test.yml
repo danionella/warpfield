@@ -23,6 +23,7 @@ jobs:
       matrix:
         platform: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
+        cupy-version: ["13.5", "13.6"]
 
     defaults:
       run:
@@ -60,6 +61,7 @@ jobs:
 
       - name: Install package
         run: |
+          pip install "cupy-cuda12x==${{ matrix.cupy-version }}"
           pip install -e .
 
       # this runs the platform-specific tests declared in tox.ini
