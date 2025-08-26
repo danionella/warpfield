@@ -77,7 +77,10 @@ def test_import_tiff(tmp_path):
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
 def test_register_volumes():
     """Test the register_volumes function."""
+    import cupyx.scipy.ndimage
+
     fixed = np.random.rand(256, 256, 256).astype("float32")
+    fixed = cupyx.scipy.ndimage.gaussian_filter(cp.array(fixed), sigma=1).get()
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift
     recipe = warpfield.Recipe.from_yaml("default.yml")
 
