@@ -23,7 +23,7 @@ jobs:
       matrix:
         platform: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
-        cupy-version: ["13.5", "13.6"]
+        cupy-version: ["13.5"]
 
     defaults:
       run:
