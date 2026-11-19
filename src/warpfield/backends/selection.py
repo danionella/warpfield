@@ -1,6 +1,6 @@
 """Choosing an array backend.
 
-``get_array_backend("auto")`` returns the first usable GPU backend (CuPy). The NumPy backend runs
+``get_array_backend("auto")`` returns the first usable GPU backend (CuPy, then MLX). The NumPy backend runs
 on the CPU and is only used when asked for by name, so registration never silently falls back to a
 slow CPU path.
 """
@@ -9,7 +9,7 @@ from importlib.util import find_spec
 
 from .array_backend import ArrayBackend
 
-_GPU_PREFERENCE = ("cupy",)
+_GPU_PREFERENCE = ("cupy", "mlx")
 _instances = {}
 _default = None
 
@@ -25,7 +25,19 @@ def _cupy_usable():
         return False
 
 
-_USABLE = {"cupy": _cupy_usable, "numpy": lambda: True}
+def _mlx_usable():
+    if find_spec("mlx") is None:
+        return False
+    try:
+        import mlx.core as mx
+
+        # The MLX warp kernel is Metal-only so far, so MLX on CUDA does not count yet
+        return mx.default_device().type == mx.DeviceType.gpu and mx.metal.is_available()
+    except Exception:
+        return False
+
+
+_USABLE = {"cupy": _cupy_usable, "mlx": _mlx_usable, "numpy": lambda: True}
 
 
 def _create(name):
@@ -37,6 +49,10 @@ def _create(name):
         from .cupy_backend import CupyBackend
 
         return CupyBackend()
+    if name == "mlx":
+        from .mlx_backend import MlxBackend
+
+        return MlxBackend()
     raise ValueError(f"Unknown backend '{name}'. Known backends: {list(_USABLE)}")
 
 
@@ -46,7 +62,7 @@ def available_array_backends():
 
 
 def set_default_array_backend(name):
-    """Set the backend that ``"auto"`` resolves to ("cupy" or "numpy"). "auto" or None restores automatic
+    """Set the backend that ``"auto"`` resolves to ("cupy", "mlx" or "numpy"). "auto" or None restores automatic
     selection."""
     global _default
     if name in (None, "auto", "default"):
@@ -59,7 +75,7 @@ def get_array_backend(backend="auto") -> ArrayBackend:
     """Return a backend object.
 
     Args:
-        backend (str or ArrayBackend): "auto"/"default"/None, a backend name ("cupy", "numpy"),
+        backend (str or ArrayBackend): "auto"/"default"/None, a backend name ("cupy", "mlx", "numpy"),
             or a backend object (returned unchanged).
     """
     if isinstance(backend, ArrayBackend):
@@ -69,7 +85,7 @@ def get_array_backend(backend="auto") -> ArrayBackend:
         name = _default or next((n for n in _GPU_PREFERENCE if _USABLE[n]()), None)
         if name is None:
             raise RuntimeError(
-                "No GPU backend found. warpfield needs CuPy with a CUDA GPU. "
+                "No GPU backend found. warpfield needs CuPy with a CUDA GPU, or MLX on Apple Silicon. "
                 "Pass backend='numpy' to run on the CPU (slow)."
             )
     if name not in _instances:
@@ -80,9 +96,9 @@ def get_array_backend(backend="auto") -> ArrayBackend:
 
 
 def backend_of(x) -> ArrayBackend:
-    """Return the backend an array belongs to (NumPy for anything that is not a CuPy array)."""
+    """Return the backend an array belongs to (NumPy for anything that is not a CuPy or MLX array)."""
     module = type(x).__module__.split(".")[0]
-    if module == "cupy":
+    if module in ("cupy", "mlx"):
         return get_array_backend(module)
     return get_array_backend("numpy")
 
@@ -90,7 +106,7 @@ def backend_of(x) -> ArrayBackend:
 def resolve_backend(x, backend=None) -> ArrayBackend:
     """Backend to compute ``x`` on.
 
-    A backend given by name (or object) wins. Otherwise a CuPy array stays on its own backend, and
+    A backend given by name (or object) wins. Otherwise a CuPy or MLX array stays on its own backend, and
     anything else (NumPy arrays, lists) goes to the default GPU backend.
     """
     if backend not in (None, "auto", "default"):
