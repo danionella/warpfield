@@ -210,7 +210,9 @@ class WarpMap:
         return coords + shifts
 
     def pull_coordinates(self, coords):
-        """Pull voxel coordinates through the warp field. Involves inversion, followed by pushing coordinates.
+        """Pull voxel coordinates from moving to fixed space (the reverse of `push_coordinates`).
+
+        Involves inversion, followed by pushing coordinates.
 
         Args:
             coords (numpy.array): 3D *voxel* coordinates to be warped (3-by-n array)
@@ -218,7 +220,8 @@ class WarpMap:
         Returns:
             numpy.array: transformed voxel coordinates
         """
-        return self.invert().push_coordinates(coords, negative_shifts=True)
+        # `invert()` already negates the displacement field, so the shifts must not be negated again here
+        return self.invert().push_coordinates(coords)
 
     def jacobian_det(self, units_per_voxel=[1, 1, 1], edge_order=1):
         """
@@ -644,7 +647,7 @@ class Smoother(BaseModel):
             return xcorr_proj
         if self.shear is not None:
             shear_blocks = self.shear * (block_size[1] / block_size[0])
-            gw = gausskernel_sheared(self.sigma[:2], shear_blocks, truncate=truncate)
+            gw = gausskernel_sheared(self.sigmas[:2], shear_blocks, truncate=truncate)
             gw = cp.array(gw[:, :, None, None, None])
             xcorr_proj = cupyx.scipy.ndimage.convolve(xcorr_proj, gw, mode="constant")
             xcorr_proj = cupyx.scipy.ndimage.gaussian_filter1d(
