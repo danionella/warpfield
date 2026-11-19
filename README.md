@@ -96,6 +96,12 @@ points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.invert().push_coordinates(points) # inverse transformation
 ``` 
 
+### Backends
+
+warpfield runs on the GPU with [CuPy](https://cupy.dev/) (NVIDIA GPUs). To choose a backend explicitly, pass `backend="cupy"` or `"numpy"` to `register_volumes` (or `WarpMap`), or set a default with `warpfield.set_default_backend(...)`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
+
+Results are returned on the backend of the input: NumPy input gives NumPy output.
+
 > [!TIP]
 > You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
@@ -134,6 +140,7 @@ python -m warpfield --help
 - `--output`: Path to save the registered volume (`.h5`). Defaults to `<moving>_registered.h5` if not provided.
 - `--compression`: Compression method for saving the registered volume. Default is `gzip`.
 - `--invert`: Additionally, register the moving image to the fixed image.
+- `--backend`: `cupy` or `numpy` (see [Backends](#backends)). Default is `auto`.
 
 #### Output Structure
 
