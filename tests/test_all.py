@@ -131,6 +131,21 @@ def test_smoother_shear():
 
 
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
+def test_warp_volume_single_point_field():
+    """A displacement field with one point per axis (translation level) is a constant shift (#45)."""
+    import scipy.ndimage
+    from warpfield.warp import warp_volume
+
+    vol = np.random.default_rng(0).standard_normal((20, 22, 24)).astype("float32")
+    disp = np.float32([2.5, -1.0, 0.75]).reshape(3, 1, 1, 1)
+    scale, offset = cp.asarray([20, 22, 24], dtype="float32"), cp.asarray([-0.5, -0.5, -0.5], dtype="float32")
+    out = warp_volume(cp.asarray(vol), cp.asarray(disp), scale, offset).get()
+    # the kernel interpolates towards 0 beyond the last voxel, as scipy's "grid-constant" does
+    expected = scipy.ndimage.map_coordinates(vol, np.indices(vol.shape) + disp, order=1, mode="grid-constant", cval=0)
+    np.testing.assert_allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
 def test_cli(tmp_path):
     """Test the CLI for registering volumes."""
     fixed = np.random.rand(256, 256, 256).astype("float32")

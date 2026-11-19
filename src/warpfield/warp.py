@@ -55,6 +55,11 @@ __device__ float trilinear_interp(const float* arr, const int* shape,
             int yn = (yi < 0) ? yc + 1 : (yi >= shape[1]) ? yc - 1 : yc;
             int zc = max(0, min(shape[2]-1, zi));
             int zn = (zi < 0) ? zc + 1 : (zi >= shape[2]) ? zc - 1 : zc;
+            // Axes of length 1 (e.g. a translation-only field) have no inner neighbour: stay in bounds,
+            // which makes the extrapolation constant along that axis.
+            xn = max(0, min(shape[0]-1, xn));
+            yn = max(0, min(shape[1]-1, yn));
+            zn = max(0, min(shape[2]-1, zn));
             float v0 = arr[ravel3d(shape, xc, yc, zc)];
             float v1 = arr[ravel3d(shape, xn, yn, zn)];
             return v0 + (v0 - v1);  // linear extrapolation
