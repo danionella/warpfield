@@ -26,7 +26,9 @@ jobs:
 
     defaults:
       run:
-        shell: bash -l {0}
+        # Linux/Windows need a login shell for the micromamba environment. On macOS (no micromamba), a login
+        # shell puts the system's newest Python ahead of the one from setup-python, so use a plain shell there.
+        shell: ${{ matrix.platform == 'macos-latest' && 'bash {0}' || 'bash -l {0}' }}
     steps:
       - uses: actions/checkout@v4
 
