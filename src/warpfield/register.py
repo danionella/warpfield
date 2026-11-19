@@ -389,11 +389,12 @@ class WarpMapper:
         ref_blocks = B.sliding_block(B.asarray(ref_vol, B.float32), block_size, block_stride)
         self.blocks_shape = ref_blocks.shape
         ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, iax), B.float32) for iax in [-3, -2, -1]]
-        if self.tukey_alpha < 1:
+        if self.tukey_alpha is not None and self.tukey_alpha > 0:  # alpha 0 is a rectangular window (no change)
+            alpha = float(self.tukey_alpha)
             ref_blocks_proj = [
                 p
                 * B.asarray(
-                    ndwindow([1, 1, 1, *p.shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=0.5)), B.float32
+                    ndwindow([1, 1, 1, *p.shape[-2:]], lambda n: scipy.signal.windows.tukey(n, alpha=alpha)), B.float32
                 )
                 for p in ref_blocks_proj
             ]
@@ -420,7 +421,8 @@ class WarpMapper:
         disp_field = []
         for i in range(3):
             R = B.rfft2(vol_blocks_proj[i]) * self.ref_blocks_proj_ft_conj[i]
-            xcorr_proj = xp.fft.fftshift(B.irfft2(R), axes=(-2, -1))
+            # s: odd block widths need the full width back (irfft2 alone would return one pixel less)
+            xcorr_proj = xp.fft.fftshift(B.irfft2(R, s=vol_blocks_proj[i].shape[-2:]), axes=(-2, -1))
             if smooth_func is not None:
                 xcorr_proj = B.asarray(smooth_func(xcorr_proj, self.block_size), B.float32)
             c0, c1 = xcorr_proj.shape[-2] // 2, xcorr_proj.shape[-1] // 2
@@ -434,6 +436,7 @@ class WarpMapper:
                 upsampled_region_size=int(self.subpixel * 2 + 1),
                 upsample_factor=self.subpixel,
                 axis_offsets=(xp.reshape(i0, (-1,)), xp.reshape(j0, (-1,))),
+                width=vol_blocks_proj[i].shape[-1],
             )
             del R
             si, sj = B.argmax_2d(shifts)
@@ -527,7 +530,7 @@ class RegistrationPyramid:
         if callback is not None:
             callback_output.append(callback(vol_tmp))
 
-        if np.any(self.mappers[-1].block_stride > min_block_stride[0]):
+        if np.any(self.mappers[-1].block_stride > min_block_stride):
             warnings.warn(
                 "The block stride (in voxels) in the last level should not be larger than the block stride in any previous level (along any axis)."
             )
@@ -603,9 +606,14 @@ def register_volumes(
     if video_path is not None:
         try:
             assert cbout[0].ndim == 2, "Callback output must be a 2D array"
-            ref = callback(recipe.pre_filter(B.asarray(ref, B.float32)))
+            to_np = lambda x: backend_of(x).to_numpy(x)  # noqa: E731  (callbacks may return GPU arrays)
+            # the reference frame goes through the same steps as the reference in RegistrationPyramid
+            ref = B.asarray(ref, B.float32)
+            if recipe.pre_filter is not None:
+                ref = B.asarray(recipe.pre_filter(ref, reg_mask=B.asarray(reg_mask, B.float32)), B.float32)
+            ref = to_np(callback(ref))
             vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
-            create_rgb_video(video_path, ref / vmax, np.array(cbout) / vmax, fps=10)
+            create_rgb_video(video_path, ref / vmax, np.array([to_np(c) for c in cbout]) / vmax, fps=10)
         except (ValueError, AssertionError) as e:
             warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
@@ -683,16 +691,17 @@ class Smoother(BaseModel):
         truncate = 4.0
         if self.sigmas is None:
             return xcorr_proj
+        sigmas = [float(s) for s in np.broadcast_to(self.sigmas, 3)]  # a single number applies to all axes
         if self.shear is not None:
             shear_blocks = self.shear * (block_size[1] / block_size[0])
-            gw = gausskernel_sheared(self.sigmas[:2], shear_blocks, truncate=truncate)
+            gw = gausskernel_sheared(sigmas[:2], shear_blocks, truncate=truncate)
             xcorr_proj = B.convolve_leading(xcorr_proj, gw, mode="constant")
-            xcorr_proj = B.gaussian_filter(xcorr_proj, [0, 0, self.sigmas[2], 0, 0], mode="constant", truncate=truncate)
+            xcorr_proj = B.gaussian_filter(xcorr_proj, [0, 0, sigmas[2], 0, 0], mode="constant", truncate=truncate)
         else:
-            xcorr_proj = B.gaussian_filter(xcorr_proj, [*self.sigmas, 0, 0], mode="constant", truncate=truncate)
+            xcorr_proj = B.gaussian_filter(xcorr_proj, [*sigmas, 0, 0], mode="constant", truncate=truncate)
         if self.long_range_ratio is not None:
             xcorr_proj *= 1 - self.long_range_ratio
-            long_range_sigmas = [*np.array(self.sigmas) * 5, 0, 0]
+            long_range_sigmas = [*np.array(sigmas) * 5, 0, 0]
             xcorr_proj += (
                 B.gaussian_filter(xcorr_proj, long_range_sigmas, mode="constant", truncate=truncate)
                 * self.long_range_ratio
