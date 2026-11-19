@@ -29,7 +29,9 @@ _ArrayType = Any  # numpy, cupy or mlx array
 class _BackendArray:
     """Attribute stored as a float32 array of its owner's backend (``owner.B``), converted on assignment.
 
-    The stored array is always a copy, so changing the assigned array does not change the map (as on main).
+    The map owns its arrays (as on main): an assigned array that is already on the backend is copied, so in-place
+    updates such as ``wm.warp_field *= 0.5`` never change the caller's arrays or another WarpMap's. (Conversion
+    from another backend already makes a new array.) Warp fields are small, so the copies are cheap.
     """
 
     def __set_name__(self, owner, name):
@@ -39,8 +41,9 @@ class _BackendArray:
         return self if obj is None else getattr(obj, self.attr)
 
     def __set__(self, obj, value):
-        arr = obj.B.asarray(value, obj.B.float32)
-        setattr(obj, self.attr, obj.B.copy(arr) if arr is value else arr)
+        B = obj.B
+        arr = B.asarray(value, B.float32)
+        setattr(obj, self.attr, B.copy(arr) if backend_of(value).name == B.name else arr)
 
 
 class WarpMap:
@@ -62,7 +65,7 @@ class WarpMap:
 
     def __init__(self, warp_field, block_size, block_stride, ref_shape, mov_shape, backend=None):
         self.B = resolve_backend(warp_field, backend)
-        self.warp_field = warp_field
+        self.warp_field = warp_field  # copied as needed by _BackendArray
         self.block_size = block_size
         self.block_stride = block_stride
         self.ref_shape = tuple(int(s) for s in ref_shape)
@@ -92,14 +95,17 @@ class WarpMap:
         Returns:
             array_like: warped volume (NumPy if ``vol`` was a NumPy array)
         """
+        return like_input(self._warp(vol, out=out), vol)
+
+    def _warp(self, vol, out=None):
+        """``warp`` for use inside the pipeline: always returns an array on ``self.B``."""
         B = self.B
         if tuple(vol.shape) != self.mov_shape:
             warnings.warn(f"Volume shape {vol.shape} does not match the expected shape {self.mov_shape}.")
         if out is None:
             out = B.xp.zeros(self.ref_shape, dtype=B.float32)
         offset = -self.block_size / self.block_stride / 2
-        res = B.warp_volume(B.asarray(vol, B.float32), self.warp_field, self.block_stride, offset, out=out)
-        return like_input(res, vol)
+        return B.warp_volume(B.asarray(vol, B.float32), self.warp_field, self.block_stride, offset, out=out)
 
     def apply(self, *args, **kwargs):
         """Alias of warp method"""
@@ -382,7 +388,7 @@ class WarpMapper:
         block_stride = block_size if block_stride is None else np.array(block_stride)
         ref_blocks = B.sliding_block(B.asarray(ref_vol, B.float32), block_size, block_stride)
         self.blocks_shape = ref_blocks.shape
-        ref_blocks_proj = [self.proj_method(ref_blocks, iax) for iax in [-3, -2, -1]]
+        ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, iax), B.float32) for iax in [-3, -2, -1]]
         if self.tukey_alpha < 1:
             ref_blocks_proj = [
                 p
@@ -408,7 +414,7 @@ class WarpMapper:
         """
         B, xp = self.B, self.B.xp
         vol_blocks = B.sliding_block(vol, self.block_size, self.block_stride)
-        vol_blocks_proj = [self.proj_method(vol_blocks, iax) for iax in [-3, -2, -1]]
+        vol_blocks_proj = [B.asarray(self.proj_method(vol_blocks, iax), B.float32) for iax in [-3, -2, -1]]
         del vol_blocks
 
         disp_field = []
@@ -416,7 +422,7 @@ class WarpMapper:
             R = B.rfft2(vol_blocks_proj[i]) * self.ref_blocks_proj_ft_conj[i]
             xcorr_proj = xp.fft.fftshift(B.irfft2(R), axes=(-2, -1))
             if smooth_func is not None:
-                xcorr_proj = smooth_func(xcorr_proj, self.block_size)
+                xcorr_proj = B.asarray(smooth_func(xcorr_proj, self.block_size), B.float32)
             c0, c1 = xcorr_proj.shape[-2] // 2, xcorr_proj.shape[-1] // 2
             xcorr_proj[..., c0, c1] += self.epsilon
 
@@ -469,7 +475,8 @@ class RegistrationPyramid:
         ref_vol = B.asarray(ref_vol, B.float32)
         self.ref_shape = ref_vol.shape
         if self.recipe.pre_filter is not None:
-            ref_vol = self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask)
+            # custom filters may return another array type (e.g. NumPy); the pipeline keeps everything on B
+            ref_vol = B.asarray(self.recipe.pre_filter(ref_vol, reg_mask=self.reg_mask), B.float32)
         self.mapper_ix = []
         for i in range(len(recipe.levels)):
             if recipe.levels[i].repeats < 1:
@@ -514,7 +521,8 @@ class RegistrationPyramid:
         warp_map = warp_map.resize_to(self.mappers[-1])
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
-        vol_tmp = warp_map.warp(vol_tmp0)
+        vol_tmp0 = B.asarray(vol_tmp0, B.float32)  # custom filters may return another array type (e.g. NumPy)
+        vol_tmp = warp_map._warp(vol_tmp0)
         min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
         if callback is not None:
             callback_output.append(callback(vol_tmp))
@@ -546,11 +554,13 @@ class RegistrationPyramid:
                     wm = wm.resize_to(self.mappers[-1])
 
                 warp_map = warp_map.chain(wm)
-                vol_tmp = warp_map.warp(vol_tmp0, out=vol_tmp)
+                vol_tmp = warp_map._warp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
                     callback_output.append(callback(vol_tmp))
-                B.end_step(vol_tmp, warp_map.warp_field)
-        vol_tmp = warp_map.warp(vol, out=vol_tmp)
+                # also evaluates the callback outputs: on lazy backends (MLX) an unevaluated output would keep
+                # the vol_tmp of its step alive (outputs that are already evaluated cost nothing)
+                B.end_step(vol_tmp, warp_map.warp_field, callback_output)
+        vol_tmp = warp_map._warp(vol, out=vol_tmp)
         return like_input(vol_tmp, vol_in), warp_map, callback_output
 
     def clean_up(self):
@@ -602,7 +612,9 @@ def register_volumes(
 
 
 class Projector(BaseModel):
-    """A class to apply a 2D projection and filters to a volume block. Runs on the backend of its input.
+    """A class to apply a 2D projection and filters to a volume block.
+
+    Runs on the backend of its input (see ``RegFilter``).
 
     Parameters:
         max: if True, apply a max filter to the volume block. Default is True
@@ -645,7 +657,9 @@ class Projector(BaseModel):
 
 
 class Smoother(BaseModel):
-    """Smooth blocks with a Gaussian kernel. Runs on the backend of its input.
+    """Smooth blocks with a Gaussian kernel.
+
+    Runs on the backend of its input (see ``RegFilter``).
 
     Args:
         sigmas (list): [sigma0, sigma1, sigma2]. If None, no smoothing is applied.
@@ -687,7 +701,11 @@ class Smoother(BaseModel):
 
 
 class RegFilter(BaseModel):
-    """A class to apply a filter to the volume before registration. Runs on the backend of its input.
+    """A class to apply a filter to the volume before registration.
+
+    Like ``Projector`` and ``Smoother``, this runs on the backend of its input: inside a registration the input
+    is already on the GPU, but calling ``recipe.pre_filter(vol)`` by hand on a NumPy array runs on the CPU, which
+    is slow for large volumes. Pass ``backend="auto"`` (or move ``vol`` to the GPU first) to filter on the GPU.
 
     Parameters:
         clip_thresh: threshold for clipping the reference volume. Default is 0

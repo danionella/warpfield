@@ -5,6 +5,7 @@ on the CPU and is only used when asked for by name, so registration never silent
 slow CPU path.
 """
 
+from functools import lru_cache
 from importlib.util import find_spec
 
 from .array_backend import ArrayBackend
@@ -14,6 +15,7 @@ _instances = {}
 _default = None
 
 
+@lru_cache(maxsize=None)
 def _cupy_usable():
     if find_spec("cupy") is None:
         return False
@@ -25,7 +27,7 @@ def _cupy_usable():
         return False
 
 
-def _mlx_usable():
+def _mlx_usable():  # not cached: depends on mx.default_device(), which users can change
     if find_spec("mlx") is None:
         return False
     try:
@@ -88,19 +90,25 @@ def get_array_backend(backend="auto") -> ArrayBackend:
                 "No GPU backend found. warpfield needs CuPy with a CUDA GPU, or MLX on Apple Silicon. "
                 "Pass backend='numpy' to run on the CPU (slow)."
             )
+    if name in _USABLE and not _USABLE[name]():
+        raise RuntimeError(f"Backend '{name}' is not usable on this machine (missing package or GPU).")
+    return _instance(name)
+
+
+def _instance(name):
     if name not in _instances:
-        if name in _USABLE and not _USABLE[name]():
-            raise RuntimeError(f"Backend '{name}' is not usable on this machine (missing package or GPU).")
         _instances[name] = _create(name)
     return _instances[name]
 
 
 def backend_of(x) -> ArrayBackend:
-    """Return the backend an array belongs to (NumPy for anything that is not a CuPy or MLX array)."""
+    """Return the backend an array belongs to (NumPy for anything that is not a CuPy or MLX array).
+
+    No usability check: an array that exists can always be converted, e.g. an MLX array when MLX runs on the
+    CPU or on CUDA, where the MLX backend cannot register (its warp kernel needs Metal).
+    """
     module = type(x).__module__.split(".")[0]
-    if module in ("cupy", "mlx"):
-        return get_array_backend(module)
-    return get_array_backend("numpy")
+    return _instance(module if module in ("cupy", "mlx") else "numpy")
 
 
 def resolve_backend(x, backend=None) -> ArrayBackend:
@@ -111,8 +119,9 @@ def resolve_backend(x, backend=None) -> ArrayBackend:
     """
     if backend not in (None, "auto", "default"):
         return get_array_backend(backend)
-    B = backend_of(x)
-    return B if B.name != "numpy" else get_array_backend("auto")
+    name = backend_of(x).name
+    # by name, so an MLX array on a machine where MLX cannot run the registration gives a clear error here
+    return get_array_backend("auto" if name == "numpy" else name)
 
 
 def like_input(out, inp):

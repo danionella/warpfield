@@ -102,7 +102,10 @@ extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr
 )
 
 
-def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8, 8, 8]):
+_TPB = (8, 8, 8)  # threads per block
+
+
+def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None):
     """Warp a 3D volume using a displacement field (calling a CUDA kernel).
 
     This function applies a displacement field, typically obtained from a
@@ -118,34 +121,33 @@ def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None, tpb=[8,
         disp_offset (array_like): Offset values for the displacement field.
         out (array_like, optional): Output array to store the warped volume.
             If None, a new array is created.
-        tpb (list, optional): Threads per block for CUDA kernel execution.
-            Defaults to [8, 8, 8].
+
+    All inputs are CuPy arrays (``CupyBackend.warp_volume`` converts them); none are copied unless they are not
+    C-contiguous float32.
 
     Returns:
-        array_like: Warped 3D volume.
+        cupy.ndarray: Warped 3D volume.
     """
-    was_numpy = isinstance(vol, np.ndarray)
-    vol = cp.asarray(vol, dtype="float32", order="C")  # copies only if needed
+    f32 = cp.float32
+    vol = cp.ascontiguousarray(vol, dtype=f32)
     if out is None:
         out = cp.zeros(vol.shape, dtype=vol.dtype)
     assert out.dtype == cp.dtype("float32")
-    bpg = np.ceil(np.array(out.shape) / tpb).astype("int").tolist()  # blocks per grid
+    bpg = np.ceil(np.array(out.shape) / _TPB).astype("int").tolist()  # blocks per grid
     _warp_volume_kernel(
         tuple(bpg),
-        tuple(tpb),
+        _TPB,
         (
             vol,
             cp.r_[vol.shape].astype("int32"),
-            disp_field[0].astype("float32"),
-            disp_field[1].astype("float32"),
-            disp_field[2].astype("float32"),
+            cp.ascontiguousarray(disp_field[0], dtype=f32),
+            cp.ascontiguousarray(disp_field[1], dtype=f32),
+            cp.ascontiguousarray(disp_field[2], dtype=f32),
             cp.r_[disp_field.shape[1:]].astype("int32"),
-            disp_scale.astype("float32"),
-            disp_offset.astype("float32"),
+            cp.ascontiguousarray(disp_scale, dtype=f32),
+            cp.ascontiguousarray(disp_offset, dtype=f32),
             out,
             cp.r_[out.shape].astype("int32"),
         ),
     )
-    if was_numpy:
-        out = cp.asnumpy(out)
     return out

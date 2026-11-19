@@ -332,15 +332,3 @@ def show_gif(im0, im1, filename=None, zoom=[1, 1], fps=5):
         # write to disk
         imageio.mimsave(filename, frames, fps=fps, loop=0)
         display(Image(filename=filename))
-
-
-def to_numpy_array(arr):
-    """Convert a CuPy or Mlx array to a NumPy array.
-
-    Args:
-        arr: An array which may be a NumPy array, a CuPy array, or an Mlx array.
-
-    Returns:
-        np.ndarray: The corresponding NumPy array.
-    """
-    return backend_of(arr).to_numpy(arr)

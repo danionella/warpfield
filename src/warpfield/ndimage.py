@@ -267,6 +267,18 @@ def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, a
     return xp.reshape(xp.real(patch), (*batch_shape, m, n))
 
 
+def _may_share_memory(B, x, arr):
+    """Whether ``x = B.asarray(arr, ...)`` may share memory with ``arr``, so that changing ``x`` in place could
+    change ``arr``. ``x is arr`` is not enough: conversion can return a view (np.memmap, CuPy), and NumPy views
+    MLX arrays without copying."""
+    if isinstance(x, np.ndarray) and isinstance(arr, np.ndarray):
+        return np.may_share_memory(x, arr)
+    # Same backend: asarray may return arr or a view of it. Different backends: converting allocates new memory,
+    # except that NumPy views MLX arrays (shared memory on Apple Silicon).
+    source = backend_of(arr).name
+    return source == B.name or (B.name == "numpy" and source == "mlx")
+
+
 def soften_edges(arr, soft_edge=0, copy=True, backend=None):
     """Apply a soft Tukey edge to the input array.
 
@@ -282,7 +294,7 @@ def soften_edges(arr, soft_edge=0, copy=True, backend=None):
     """
     B = resolve_backend(arr, backend)
     x = B.asarray(arr, B.float32)
-    if copy and x is arr:
+    if copy and _may_share_memory(B, x, arr):
         x = B.copy(x)
     soft_edge = np.clip(np.broadcast_to(soft_edge, (x.ndim,)), 0, np.array(x.shape) / 2)
 
@@ -333,13 +345,23 @@ def zoom_chop_pad(
     if any(s > 0 for s in soft_edge):
         x = soften_edges(x, soft_edge=np.array(soft_edge) / np.array(scale), copy=True, backend=B)
 
-    grid = B.indices(target_shape, B.float32)
+    # The source coordinate along axis i only depends on the index along axis i, so compute it as a float32
+    # vector (same operations as main) and only expand it to the full grid in the final stack. Python floats
+    # keep NumPy/CuPy scalars from promoting the grid to float64.
+    target_shape = tuple(int(s) for s in target_shape)
     coords = []
-    for i in range(len(target_shape)):
-        c = (grid[i] - target_shape[i] / 2) / scale[i] + x.shape[i] / 2
+    for i, n in enumerate(target_shape):
+        c = np.arange(n, dtype=np.float32)
+        c -= float(target_shape[i]) / 2
+        c /= float(scale[i])
+        c += x.shape[i] / 2
         if flip[i]:
-            c = -c + (x.shape[i] - 1)
-        coords.append(c - shift[i])
+            c *= -1
+            c += x.shape[i] - 1
+        c -= float(shift[i])
+        shape = [1] * len(target_shape)
+        shape[i] = n
+        coords.append(B.xp.broadcast_to(B.asarray(c.reshape(shape)), target_shape))
     result = B.map_coordinates(x, B.xp.stack(coords), order=order, mode="constant", cval=cval)
     return like_input(result, arr)
 

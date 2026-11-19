@@ -114,6 +114,8 @@ warpfield uses the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDI
 
 Results are returned on the backend of the input: NumPy input gives NumPy output.
 
+The pieces of a recipe (`RegFilter`, `Projector`, `Smoother`) are different: they run on the backend of the array they get. Inside a registration that is the GPU, but calling `recipe.pre_filter(vol)` yourself on a NumPy array runs on the CPU, which is slow for large volumes. Pass `backend="auto"` (or a GPU array) to run it on the GPU.
+
 > [!TIP]
 > You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 

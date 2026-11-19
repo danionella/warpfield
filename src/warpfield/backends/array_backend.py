@@ -17,6 +17,22 @@ Rules for shared code:
 - no float64 on the device (MLX GPUs lack it); ``B.float_hp`` is the most precise float available
 - call ``B.end_step(...)`` after each registration step, and ``B.eval(...)`` where intermediates should be
   computed early to bound memory; on lazy backends (MLX) they force computation, elsewhere they do nothing
+
+Where code runs. There are two kinds of functions, with different rules:
+
+- **Entry points**, which users call with their own data (``register_volumes``, ``WarpMap`` and its methods,
+  ``warpfield.warp.warp_volume``, the ``ndimage`` functions, ...). They compute on the backend given by
+  ``backend=``, else on the backend of a CuPy/MLX input, else on the default GPU backend
+  (``resolve_backend``), and return results in the type of the input (``like_input``), so NumPy in gives
+  NumPy out.
+- **Pipeline pieces**, which the registration calls on arrays that are already on its backend (``Projector``,
+  ``Smoother``, ``RegFilter`` and custom callables in a ``Recipe``). They compute on the backend of their
+  input (``backend_of``). This keeps ``backend="numpy"`` on the CPU and lets custom callables keep the
+  ``f(vol_blocks, axis)`` signature.
+
+Inside the pipeline (``WarpMapper``, ``RegistrationPyramid``), everything stays on ``B``: use ``B.*``
+methods (and private helpers such as ``WarpMap._warp``) rather than entry points, and pass whatever user
+code returns through ``B.asarray``, since a custom callable may return e.g. a NumPy array.
 """
 
 from __future__ import annotations
@@ -44,6 +60,14 @@ class ArrayBackend:
 
     def __repr__(self):
         return f"{type(self).__name__}(name={self.name!r})"
+
+    def __reduce__(self):
+        # Backends hold modules, which cannot be pickled; unpickle to this process's backend of the same name
+        # (so WarpMaps can be pickled, deep-copied and sent to worker processes). No usability check, as in
+        # backend_of: restoring an object should not fail where creating it did not.
+        from .selection import _instance
+
+        return (_instance, (self.name,))
 
     # ------------------------------------------------------------------ dtypes
     @property

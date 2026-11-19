@@ -11,9 +11,14 @@ import nibabel as nib
 import tifffile
 
 import warpfield
-from warpfield.utils import load_data, to_numpy_array as _to_numpy
+from warpfield.utils import load_data
 
-from warpfield.backends import available_array_backends, get_array_backend
+from warpfield.backends import available_array_backends, backend_of, get_array_backend
+
+
+def _to_numpy(x):
+    return backend_of(x).to_numpy(x)
+
 
 BACKENDS = available_array_backends()  # e.g. ["cupy", "numpy"], ["mlx", "numpy"] or ["numpy"]
 GPU_AVAILABLE = len(BACKENDS) > 1
@@ -375,3 +380,119 @@ def test_copilot_review_cases(backend):
     pytest.importorskip("skimage")
     vol = B.asarray(np.random.default_rng(0).random((10, 12, 14)), B.float32)
     assert warpfield.utils.mosaic_callback(num_slices=9, thick=10)(vol).ndim == 2
+
+
+# ------------------------------------------------------------- cases from the maintainer's review of #48
+def test_custom_callables_may_return_numpy(backend):
+    """A custom pre_filter / projector / smoother that returns NumPy must not move the pipeline to the host."""
+    import scipy.ndimage
+
+    fixed, moving = _small_volumes()
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.pre_filter = lambda vol, reg_mask=None: scipy.ndimage.gaussian_filter(_to_numpy(vol), 1.0)
+    proj = warpfield.register.Projector()
+    recipe.levels[0].project = lambda blocks, axis: _to_numpy(proj(blocks, axis))
+    smooth = recipe.levels[0].smooth
+    recipe.levels[0].smooth = lambda xcorr, block_size: _to_numpy(smooth(xcorr, block_size))
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+    assert isinstance(registered, np.ndarray) and warp_map.B.name == backend
+
+
+def test_zoom_chop_pad_matches_reference(backend):
+    """zoom_chop_pad with NumPy scale/shape inputs (as match_volumes passes them) matches the formula on main."""
+    import scipy.ndimage
+
+    x = np.random.default_rng(0).random((10, 12, 14)).astype("float32")
+    target_shape, scale = np.array([13, 9, 16]), np.array([1.3, 0.8, 1.1])
+    shift, flip = np.array([0.5, -1.0, 2.0]), (False, True, False)
+    out = warpfield.ndimage.zoom_chop_pad(x, target_shape, scale, shift=shift, flip=flip, backend=backend)
+    coords = np.indices(target_shape).astype("float64")
+    for i in range(3):
+        coords[i] = (coords[i] - target_shape[i] / 2) / scale[i] + x.shape[i] / 2
+        if flip[i]:
+            coords[i] = -coords[i] + x.shape[i] - 1
+        coords[i] -= shift[i]
+    expected = scipy.ndimage.map_coordinates(x, coords, order=1, mode="constant", cval=0)
+    assert isinstance(out, np.ndarray) and out.dtype == np.float32
+    np.testing.assert_allclose(out, expected, atol=1e-5)
+
+
+def test_warpmap_pickle_and_deepcopy(backend):
+    import copy
+    import pickle
+
+    field = np.random.default_rng(0).random((3, 2, 3, 4)).astype("float32")
+    wm = warpfield.WarpMap(field, [4, 4, 4], [2, 2, 2], (4, 6, 8), (4, 6, 8), backend=backend)
+    for wm2 in (pickle.loads(pickle.dumps(wm)), copy.deepcopy(wm)):
+        assert wm2.B is wm.B
+        np.testing.assert_array_equal(_to_numpy(wm2.warp_field), field)
+        wm2.warp_field += 1
+        np.testing.assert_array_equal(_to_numpy(wm.warp_field), field)
+
+
+def test_warpmap_copies_backend_inputs(backend):
+    """WarpMap owns its arrays, also when given arrays already on its backend (CuPy returns views there)."""
+    B = get_array_backend(backend)
+    f = B.asarray(np.zeros((3, 2, 2, 2), "float32"))
+    bs = B.asarray(np.ones(3, "float32"))
+    wm = warpfield.WarpMap(f, bs, bs, (2, 2, 2), (2, 2, 2), backend=backend)
+    wm.warp_field += 1
+    wm.block_size *= 2
+    assert _to_numpy(f).sum() == 0 and _to_numpy(bs).sum() == 3
+    wm2 = wm.median_filter()  # made via _new
+    wm2.block_stride *= 3
+    assert _to_numpy(wm.block_stride).sum() == 3
+    wm2.warp_field = wm.warp_field  # assignment copies too
+    wm2.warp_field *= 0
+    assert _to_numpy(wm.warp_field).sum() == 24
+
+
+def test_soften_edges_copy_keeps_memmap(tmp_path):
+    path = tmp_path / "vol.npy"
+    np.save(path, np.ones((8, 9, 10), "float32"))
+    mm = np.load(path, mmap_mode="r+")
+    out = warpfield.ndimage.soften_edges(mm, soft_edge=2, copy=True, backend="numpy")
+    assert out[0, 0, 0] == 0
+    mm.flush()
+    assert np.load(path).min() == 1
+
+
+def test_backend_of_without_usable_mlx(monkeypatch):
+    """MLX arrays can be converted even where the MLX backend cannot register (MLX on CPU or CUDA)."""
+    mx = pytest.importorskip("mlx.core")
+    from warpfield.backends import selection
+
+    monkeypatch.setitem(selection._USABLE, "mlx", lambda: False)
+    monkeypatch.setattr(selection, "_instances", {})
+    a = mx.ones((2, 3))
+    assert backend_of(a).name == "mlx"
+    np.testing.assert_array_equal(backend_of(a).to_numpy(a), np.ones((2, 3)))
+    np.testing.assert_array_equal(get_array_backend("numpy").asarray(a), np.ones((2, 3)))
+    with pytest.raises(RuntimeError):
+        get_array_backend("mlx")  # asking for it by name still checks
+    with pytest.raises(RuntimeError):
+        warpfield.WarpMap(mx.zeros((3, 2, 2, 2)), [1] * 3, [1] * 3, (2,) * 3, (2,) * 3)  # so does computing on it
+
+
+def test_soften_edges_copy_keeps_input(backend):
+    """copy=True never changes the input, whatever its type (an MLX array viewed by NumPy shares memory)."""
+    inputs = [np.ones((6, 7, 8), "float32"), np.ones((6, 7, 8))]
+    if backend != "numpy":
+        inputs.append(get_array_backend(backend).asarray(np.ones((6, 7, 8), "float32")))
+    for arr in inputs:
+        for b in {backend, "numpy"}:
+            warpfield.ndimage.soften_edges(arr, soft_edge=2, copy=True, backend=b)
+            assert _to_numpy(arr).min() == 1, (type(arr), b)
+
+
+def test_copies_with_own_backend_object():
+    """Passing a new backend object (not the cached instance) must not skip the copies."""
+    from warpfield.backends.numpy_backend import NumpyBackend
+
+    field = np.zeros((3, 2, 2, 2), "float32")
+    wm = warpfield.WarpMap(field, [1] * 3, [1] * 3, (2,) * 3, (2,) * 3, backend=NumpyBackend())
+    wm.warp_field += 1
+    vol = np.ones((6, 7, 8), "float32")
+    warpfield.ndimage.soften_edges(vol, soft_edge=2, copy=True, backend=NumpyBackend())
+    assert field.sum() == 0 and vol.min() == 1
