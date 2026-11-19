@@ -1,13 +1,16 @@
-import warnings
-from functools import partial
 import io
+import h5py
+import warnings
+import hdf5plugin
+import scipy.ndimage
 
 import numpy as np
-import cupy as cp
-import cupyx.scipy.ndimage
 
-import h5py
-import hdf5plugin
+from pathlib import Path
+
+from .backends import available_array_backends as get_available_backends  # noqa: F401 (public name)
+from .backends import backend_of
+from .backends import set_default_array_backend as set_default_backend  # noqa: F401 (public name)
 
 
 def load_data(file_path: str):
@@ -22,6 +25,8 @@ def load_data(file_path: str):
         - data (np.ndarray): Loaded data as a NumPy array.
         - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
     """
+    if isinstance(file_path, Path):
+        file_path = str(file_path)
 
     if file_path.endswith(".npy"):
         data = np.load(file_path).copy()
@@ -34,7 +39,7 @@ def load_data(file_path: str):
             data = np.array(f[key])
             attrs = dict(f[key].attrs)  # Extract attributes as metadata
         return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
-    
+
     elif ".h5/" in file_path or ".hdf5/" in file_path:
         base, key = file_path.split(".h5/", 1) if ".h5/" in file_path else file_path.split(".hdf5/", 1)
         file_path = base + (".h5" if ".h5/" in file_path else ".hdf5")
@@ -90,6 +95,7 @@ def load_data(file_path: str):
 
     elif ".mat:" in file_path:
         from scipy.io import loadmat
+
         file_path, variable_name = file_path.split(":", 1)
         mat_data = loadmat(file_path)
         if variable_name not in mat_data:
@@ -134,6 +140,7 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     """
     try:
         import imageio
+        import imageio_ffmpeg  # Make sure this is also installed
     except ImportError:
         raise ImportError(
             "The 'imageio' and 'imageio-ffmpeg' packages are required to create videos. "
@@ -149,10 +156,12 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
 
     vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
-    try: 
-        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf])
+    try:
+        imageio.mimsave(
+            fn, np.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf]
+        )
     except Exception:
-        imageio.mimsave(fn, cp.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
+        imageio.mimsave(fn, np.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
 
 
 def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
@@ -161,19 +170,20 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
     rearranged and transposed according to the specified axes.
 
     Args:
-        data (cp.ndarray): A 3D array representing the volume (CuPy array).
+        data (array-like): A 3D array representing the volume (array-like).
         units_per_voxel (list): The physical size of each voxel in the [z, y, x] directions.
         width (int): The maximum width of the output 2D array.
         axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
 
     Returns:
-        cp.ndarray: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
+        np.array: A 2D array containing the tiled MIPs rearranged and transposed according to the specified axes.
     """
     axes = np.array(axes)
     units_per_voxel = np.array(units_per_voxel)
 
-    # Compute the MIPs along the three original axes (z, y, x)
-    mips = [cp.max(data, axis=ax) for ax in range(3)]  # [YX, ZX, ZY]
+    # Compute the MIPs along the three original axes (z, y, x) on the device, then copy only the 2D images
+    B = backend_of(data)
+    mips = [B.to_numpy(data.max(axis=ax)) for ax in range(3)]  # [YX, ZX, ZY]
 
     # Rearrange and transpose the MIPs based on the new axis order
     reordered_mips = []
@@ -193,7 +203,7 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
     # Resize each MIP to the correct scale
     def resize_image(image, target_shape):
         scale_factors = [target_shape[0] / image.shape[0], target_shape[1] / image.shape[1]]
-        return cupyx.scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
+        return scipy.ndimage.zoom(image, scale_factors, order=1)  # Linear interpolation
 
     resized_mips = [
         resize_image(mip, (int(size[0] * scale + 0.5), int(size[1] * scale + 0.5)))
@@ -203,7 +213,7 @@ def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
     # Determine the canvas size
     canvas_height = resized_mips[0].shape[0] + resized_mips[1].shape[0]  # y + z
     canvas_width = resized_mips[0].shape[1] + resized_mips[2].shape[0]  # x + z
-    canvas = cp.zeros((canvas_height, canvas_width), dtype=data.dtype)
+    canvas = np.zeros((canvas_height, canvas_width), dtype=mips[0].dtype)
 
     # Place the MIPs on the canvas
     canvas[: resized_mips[0].shape[0], : resized_mips[0].shape[1]] = resized_mips[0]  # YX (top-left)
@@ -224,13 +234,13 @@ def mips_callback(vmax=1, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):
         axes (list): The desired axis order (e.g., [0, 1, 2] for [z, y, x]).
 
     Returns:
-        function: A function that takes a 3D cupy volume and returns the MIPs as 2D numpy array.
+        function: A function that takes a 3D volume and returns the MIPs as 2D numpy array.
     """
 
     def wrapped(vol):
         mips = get_mips(vol, units_per_voxel=units_per_voxel, width=width, axes=axes)
         mips = mips / vmax
-        return mips.get()
+        return mips
 
     return wrapped
 
@@ -253,21 +263,22 @@ def mosaic_callback(num_slices=9, axis=0, transpose=False, units_per_voxel=[1, 1
         raise ImportError("The 'scikit-image' package is required to create mosaics. Please install it.")
 
     def wrapped(data):
-        data = cp.array(data, copy=False, dtype="float32")
+        B = backend_of(data)
         slice_indices = np.linspace(0, data.shape[axis] - 1, num_slices + 2, dtype=int)[1:-1]
 
         slices = []
         for i in range(len(slice_indices)):
-            slices.append(cp.take(data, slice_indices[i] + cp.arange(-thick // 2, thick // 2), axis=axis).max(axis))
-        slices = cp.array(slices)
+            ix = (slice_indices[i] + np.arange(-thick // 2, thick // 2)) % data.shape[axis]  # wrap, as cupy.take does
+            ix = B.asarray(ix, B.int32)
+            slices.append(B.to_numpy(B.xp.take(data, ix, axis=axis).max(axis)).astype("float32"))
+        slices = np.array(slices)
         aspect_ratio = np.array([units_per_voxel[i] for i in range(3) if i != axis])
-        slices = slices.get()
         mosaic = montage(slices)
         zoom_factors = min(width / mosaic.shape[1], 1) * aspect_ratio / aspect_ratio[1]
-        mosaic = cupyx.scipy.ndimage.zoom(cp.array(mosaic), zoom_factors, order=1) / vmax
+        mosaic = scipy.ndimage.zoom(np.array(mosaic), zoom_factors, order=1) / vmax
         if transpose:
             mosaic = mosaic.T
-        return mosaic.get()
+        return mosaic
 
     return wrapped
 
@@ -284,9 +295,7 @@ def showvid(filename, width=600, embed=False, loop=True):
     try:
         from IPython.display import Video, display
     except ImportError:
-        raise ImportError(
-            "The 'IPython' package is required to display videos. Please install it."
-        )
+        raise ImportError("The 'IPython' package is required to display videos. Please install it.")
 
     html_attributes = "controls loop" if loop else "controls"
     display(Video(filename, embed=embed, width=width, html_attributes=html_attributes))
@@ -302,9 +311,7 @@ def show_gif(im0, im1, filename=None, zoom=[1, 1], fps=5):
     try:
         from IPython.display import Image, display
     except ImportError:
-        raise ImportError(
-            "The 'IPython' package is required to display images. Please install it."
-        )
+        raise ImportError("The 'IPython' package is required to display images. Please install it.")
     try:
         import imageio
     except ImportError:

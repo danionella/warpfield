@@ -14,11 +14,12 @@ authors = [
 license = { text = "MIT" }
 readme = "README.md"
 keywords = ["warpfield", "python"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",
-    "cupy-cuda12x",
+    "cupy-cuda12x; platform_system != 'Darwin'",
+    "mlx>=0.32.4; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tqdm",
     "pydantic",
     "pyyaml",
@@ -35,6 +36,7 @@ dependencies = [
 classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
 ]
 
 [project.urls]

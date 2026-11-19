@@ -27,6 +27,9 @@ def main():
     parser.add_argument(
         "--invert", action="store_true", help="Invert the warp map and register the moving image to the fixed image."
     )
+    parser.add_argument(
+        "--backend", default="auto", help="Backend to compute on: `cupy`, `mlx` or `numpy` (CPU, slow). Default: auto (first available GPU backend)."
+    )
     args = parser.parse_args()
     output_path = args.output or f"{os.path.splitext(args.moving)[0]}_registered.h5"
 
@@ -45,7 +48,7 @@ def main():
 
     # register
     logging.info("Registering the moving image to the fixed image...")
-    registered_image, warp_map, _ = register_volumes(fixed_image, moving_image, recipe, verbose=True)
+    registered_image, warp_map, _ = register_volumes(fixed_image, moving_image, recipe, backend=args.backend, verbose=True)
 
     if args.invert:
         logging.info("Inverting the warp map...")
@@ -61,12 +64,9 @@ def main():
     with h5py.File(output_path, "w") as f:
         f.create_dataset("moving_reg", data=registered_image, compression=args.compression)
         f.create_dataset("recipe_json", data=recipe.model_dump_json().encode("utf-8"))
-        warp_map_group = f.create_group("warp_map")
-        warp_map_group.create_dataset("warp_field", data=warp_map.warp_field.get(), compression=args.compression)
-        warp_map_group.create_dataset("block_size", data=warp_map.block_size.get())
-        warp_map_group.create_dataset("block_stride", data=warp_map.block_stride.get())
         if args.invert:
             f.create_dataset("fixed_reg_inv", data=fixed_reg_inv, compression=args.compression)
+    warp_map.to_h5(output_path, group="warp_map", compression=args.compression)
 
     logging.info("Done!")
 

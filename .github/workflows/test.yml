@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        platform: [ubuntu-latest, windows-latest]
+        platform: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12"]
 
     defaults:
@@ -41,6 +41,7 @@ jobs:
       #     echo "cache_key=${{ runner.os }}-${{ matrix.python-version }}-$(date +'%Y-%V')" >> $GITHUB_OUTPUT
 
       - uses: mamba-org/setup-micromamba@v2
+        if: runner.os != 'macOS'
         with:
           create-args: >-
             cupy
@@ -54,14 +55,13 @@ jobs:
           # cache-environment: false
           # #cache-environment-key: "env-${{ steps.cachekey.outputs.cache_key }}"
           post-cleanup: 'all'
-      
+
       - name: Install dependencies
         run: |
           pip install pytest
 
       - name: Install package
         run: |
-          pip install cupy-cuda12x
           pip install -e .
 
       # this runs the platform-specific tests declared in tox.ini

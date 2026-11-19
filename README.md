@@ -1,4 +1,4 @@
-![Python Version](https://img.shields.io/badge/python-3.9+-blue)
+![Python Version](https://img.shields.io/badge/python-3.10+-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![tests](https://github.com/danionella/warpfield/actions/workflows/test.yml/badge.svg)
 [![PyPI - Version](https://img.shields.io/pypi/v/warpfield)](https://pypi.org/project/warpfield/)
@@ -17,7 +17,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 
 ### Features
 
-- GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans)
+- GPU-accelerated code for high performance ([CuPy](https://cupy.dev/), CUDA kernels & FFT plans or [MLX](https://ml-explore.github.io/mlx/build/html/index.html), Apple Silicon GPU acceleration)
 - Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Python API and command-line interface (CLI)
@@ -37,13 +37,15 @@ The key steps are:
 
 ## Hardware requirements
 
-- A computer running Linux (recommended) or Windows
-- A CUDA-compatible GPU with sufficient GPU memory: ≥ 30 bytes per voxel (30 GB / gigavoxel) of your 3D volume
+- A computer running Linux (recommended) or Windows for the CUDA backend, or macOS 14.0+ for the Metal backend
+- A CUDA- or Metal-compatible GPU with sufficient GPU memory: ≥ 30 bytes per voxel (30 GB / gigavoxel) of your 3D volume
 
 
 ## Installation
 
-Using [conda/mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install):
+### CUDA (NVIDIA GPUs)
+
+This requires the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) 12.x to be installed on your system. We recommend installing `warpfield` via [conda/mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install):
 
 ```bash
 conda install conda-forge::warpfield
@@ -54,7 +56,7 @@ Or, to install into a new conda environment (recommended):
 ```bash
 conda create -n warpfield conda-forge::warpfield
 conda activate warpfield
-``` 
+```
 
 Installation via pip is also possible (but you need to separately ensure [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) 12.x is installed):
 
@@ -62,6 +64,16 @@ Installation via pip is also possible (but you need to separately ensure [CUDA T
 pip install warpfield
 ```
 
+### Apple Silicon (Metal)
+
+This requires a Mac with Apple Silicon (M-series chip) and macOS 14.0 or later. Installation
+via pip should just work:
+
+```bash
+pip install warpfield
+```
+
+### Development
 For development, fork and clone the repository. Then type:
 
 ```bash
@@ -72,7 +84,7 @@ pip install --no-deps -e .
 
 ## Quickstart
 ```python
-import warpfield 
+import warpfield
 
 # 1. Load data (note: the two volumes are expected to be of the same resolution)
 vol_ref, _ = warpfield.load_data("reference_volume.npy")
@@ -94,7 +106,15 @@ vol_ref_reg = warp_map.invert().apply(vol_ref)
 points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
 points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.invert().push_coordinates(points) # inverse transformation
-``` 
+```
+
+### Backends
+
+warpfield uses the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To choose one, pass `backend="cupy"`, `"mlx"` or `"numpy"` to `register_volumes` (or `WarpMap`), or set a default with `warpfield.set_default_backend("mlx")`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
+
+Results are returned on the backend of the input: NumPy input gives NumPy output.
+
+The pieces of a recipe (`RegFilter`, `Projector`, `Smoother`) are different: they run on the backend of the array they get. Inside a registration that is the GPU, but calling `recipe.pre_filter(vol)` yourself on a NumPy array runs on the CPU, which is slow for large volumes. Pass `backend="auto"` (or a GPU array) to run it on the GPU.
 
 > [!TIP]
 > You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
@@ -103,7 +123,7 @@ points_pulled = warp_map.invert().push_coordinates(points) # inverse transformat
 > Fixed and moving volumes are expected to be of the same voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
 >
 > If the moving volume does not already have the same resolution (voxel size) as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom) to match scale:
-> 
+>
 > ```python
 > vol_mov = zoom(vol_mov, zoom_factors = voxel_size_moving/voxel_size_fixed) # voxel sizes are 3-tuples of floats
 > ```
@@ -125,7 +145,7 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For hierarchical storage formats (`.h5`, `.zarr`, `.n5`), specify the dataset name using the format `filename.h5/dataset_name`. 
+- `--fixed`: Path to the fixed 3D volume file (`.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For hierarchical storage formats (`.h5`, `.zarr`, `.n5`), specify the dataset name using the format `filename.h5/dataset_name`.
 - `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
@@ -134,6 +154,7 @@ python -m warpfield --help
 - `--output`: Path to save the registered volume (`.h5`). Defaults to `<moving>_registered.h5` if not provided.
 - `--compression`: Compression method for saving the registered volume. Default is `gzip`.
 - `--invert`: Additionally, register the moving image to the fixed image.
+- `--backend`: `cupy`, `mlx` or `numpy` (see [Backends](#backends)). Default is `auto`.
 
 #### Output Structure
 
@@ -183,7 +204,7 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 
 ### Defining recipes
 
-Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](https://github.com/danionella/warpfield/blob/main/src/warpfield/recipes/default.yml), or your own): 
+Recipes can be loaded from YAML files (either those shipped with this package, such as [default.yml](https://github.com/danionella/warpfield/blob/main/src/warpfield/recipes/default.yml), or your own):
 
 ```python
 recipe = warpfield.Recipe.from_yaml("default.yml")
@@ -230,7 +251,7 @@ recipe.levels[-1].repeats = 5
 > [!TIP]
 > Generating videos of the registration process:
 > ```python
-> video_path = "output.mp4" 
+> video_path = "output.mp4"
 > units_per_voxel = [1,1,1] # voxel aspect ratio or physical dimensions (e.g. µm)
 > callback = warpfield.utils.mips_callback(units_per_voxel=units_per_voxel)
 > moving_reg, warpmap, _ = warpfield.register_volumes(fixed, moving, recipe, video_path=video_path, callback=callback)
@@ -279,5 +300,4 @@ Hoffmann, M., Henninger, J. et al. Blazed oblique plane microscopy reveals scale
 
 - [Advanced Normalization Tools in Python (ANTsPy)](https://github.com/ANTsX/ANTsPy)
 - [Computational Morphometry Toolkit (CMTK)](https://www.nitrc.org/projects/cmtk)
-- [Constrained Large Deformation Diffeomorphic Image Registration (CLAIRE)
-](https://github.com/andreasmang/claire)
+- [Constrained Large Deformation Diffeomorphic Image Registration (CLAIRE)](https://github.com/andreasmang/claire)
