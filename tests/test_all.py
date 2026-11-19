@@ -94,6 +94,58 @@ def test_register_volumes():
 
 
 @pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
+def test_push_pull_coordinates_roundtrip():
+    """Pulling pushed coordinates should return the original coordinates."""
+    ref_shape = (128, 128, 128)
+    block_size = np.array([16, 16, 16])
+    grid = np.indices((8, 8, 8)).astype("float32")
+    # smooth displacement field with shifts of a few voxels
+    warp_field = np.stack([3.0 + np.sin(grid[1] / 3), -2.0 + np.cos(grid[2] / 4), 2.5 * np.ones_like(grid[0])]).astype(
+        "float32"
+    )
+    warp_map = warpfield.register.WarpMap(
+        warp_field, block_size, block_stride=block_size, ref_shape=ref_shape, mov_shape=ref_shape
+    )
+
+    points = np.random.default_rng(0).uniform(32, 96, size=(3, 200)).astype("float32")
+    pushed = warp_map.push_coordinates(points)
+    pulled = warp_map.pull_coordinates(pushed).get()
+
+    assert np.abs(pulled - points).max() < 0.25, "pull_coordinates does not reverse push_coordinates."
+
+
+@pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
+def test_smoother_shear():
+    """Smoother with shear should run, and shear=0 should match the non-shear path."""
+    xcorr_proj = cp.array(np.random.default_rng(0).standard_normal((6, 6, 6, 9, 9)).astype("float32"))
+    block_size = np.array([32, 32, 32])
+    sigmas = [1.0, 1.5, 0.8]
+
+    plain = warpfield.register.Smoother(sigmas=sigmas)(xcorr_proj.copy(), block_size)
+    sheared0 = warpfield.register.Smoother(sigmas=sigmas, shear=0.0)(xcorr_proj.copy(), block_size)
+    sheared = warpfield.register.Smoother(sigmas=sigmas, shear=0.5)(xcorr_proj.copy(), block_size)
+
+    assert sheared.shape == xcorr_proj.shape
+    assert np.allclose(sheared0.get(), plain.get(), atol=1e-5), "shear=0 should match the non-shear smoothing."
+    assert not np.allclose(sheared.get(), plain.get(), atol=1e-3), "shear=0.5 should change the result."
+
+
+@pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
+def test_warp_volume_single_point_field():
+    """A displacement field with one point per axis (translation level) is a constant shift (#45)."""
+    import scipy.ndimage
+    from warpfield.warp import warp_volume
+
+    vol = np.random.default_rng(0).standard_normal((20, 22, 24)).astype("float32")
+    disp = np.float32([2.5, -1.0, 0.75]).reshape(3, 1, 1, 1)
+    scale, offset = cp.asarray([20, 22, 24], dtype="float32"), cp.asarray([-0.5, -0.5, -0.5], dtype="float32")
+    out = warp_volume(cp.asarray(vol), cp.asarray(disp), scale, offset).get()
+    # the kernel interpolates towards 0 beyond the last voxel, as scipy's "grid-constant" does
+    expected = scipy.ndimage.map_coordinates(vol, np.indices(vol.shape) + disp, order=1, mode="grid-constant", cval=0)
+    np.testing.assert_allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.skipif(not gpu_available, reason="No GPU detected.")
 def test_cli(tmp_path):
     """Test the CLI for registering volumes."""
     fixed = np.random.rand(256, 256, 256).astype("float32")
