@@ -184,3 +184,17 @@ def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""
     for name in ["register", "ndimage", "warp", "utils", "backends"]:
         assert name in warpfield.__all__ and hasattr(warpfield, name)
+
+
+# ------------------------------------------------------------------------------------------- installation
+def test_no_gpu_backend_error_explains_install(monkeypatch):
+    """Without a usable GPU backend, the error names the pip extras and why an installed CuPy is unusable."""
+    from warpfield.backends import selection
+
+    monkeypatch.setitem(selection._USABLE, "cupy", lambda: False)
+    monkeypatch.setitem(selection._USABLE, "mlx", lambda: False)
+    monkeypatch.setattr(selection, "_default", None)
+    monkeypatch.setitem(selection._unusable_reason, "cupy", "ImportError: libcublasLt.so.12 not found")
+    with pytest.raises(RuntimeError, match=r"warpfield\[cuda12\]") as err:
+        selection.get_array_backend("auto")
+    assert "libcublasLt" in str(err.value)

@@ -45,7 +45,7 @@ The key steps are:
 
 ### CUDA (NVIDIA GPUs)
 
-This requires the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) 12.x to be installed on your system. We recommend installing `warpfield` via [conda/mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install):
+This requires an NVIDIA GPU with a current driver. The CUDA libraries are installed along with `warpfield`, so you don't need a separate CUDA Toolkit. We recommend installing `warpfield` via [conda/mamba](https://github.com/conda-forge/miniforge?tab=readme-ov-file#install):
 
 ```bash
 conda install conda-forge::warpfield
@@ -58,11 +58,14 @@ conda create -n warpfield conda-forge::warpfield
 conda activate warpfield
 ```
 
-Installation via pip is also possible (but you need to separately ensure [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) 12.x is installed):
+Installation via pip is also possible. Choose the extra that matches your driver's CUDA version (`nvidia-smi` shows it in the top right):
 
 ```bash
-pip install warpfield
+pip install "warpfield[cuda12]"   # CUDA 12.x
+pip install "warpfield[cuda13]"   # CUDA 13.x
 ```
+
+A plain `pip install warpfield` does not install CuPy. Use it if CuPy is already installed, as on Google Colab, so that the existing CuPy is not replaced by one built for a different CUDA version.
 
 ### Apple Silicon (Metal)
 

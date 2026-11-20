@@ -15,6 +15,9 @@ _instances = {}
 _default = None
 
 
+_unusable_reason = {}  # backend name -> why it is installed but not usable (shown in error messages)
+
+
 @lru_cache(maxsize=None)
 def _cupy_usable():
     if find_spec("cupy") is None:
@@ -22,8 +25,19 @@ def _cupy_usable():
     try:
         import cupy
 
-        return cupy.cuda.runtime.getDeviceCount() > 0
-    except Exception:
+        if cupy.cuda.runtime.getDeviceCount() < 1:
+            _unusable_reason["cupy"] = "no CUDA GPU found"
+            return False
+        # A CuPy wheel without the CUDA libraries imports fine and only fails when a library is first used, so
+        # use the ones warpfield needs: the modules the backend imports, NVRTC (kernels), cuBLAS and cuFFT.
+        import cupyx.scipy.ndimage
+        import cupyx.scipy.signal.windows
+
+        x = cupy.ones((8, 8), dtype=cupy.float32)
+        float((x @ x).sum() + cupy.fft.rfft2(x).real.sum())
+        return True
+    except Exception as e:
+        _unusable_reason["cupy"] = f"{type(e).__name__}: {e}"
         return False
 
 
@@ -87,12 +101,17 @@ def get_array_backend(backend="auto") -> ArrayBackend:
         name = _default or next((n for n in _GPU_PREFERENCE if _USABLE[n]()), None)
         if name is None:
             raise RuntimeError(
-                "No GPU backend found. warpfield needs CuPy with a CUDA GPU, or MLX on Apple Silicon. "
-                "Pass backend='numpy' to run on the CPU (slow)."
+                "No GPU backend found. warpfield needs CuPy with a CUDA GPU (pip install 'warpfield[cuda12]' or "
+                "'warpfield[cuda13]', matching your CUDA driver), or MLX on Apple Silicon. "
+                "Pass backend='numpy' to run on the CPU (slow)." + _reasons()
             )
     if name in _USABLE and not _USABLE[name]():
-        raise RuntimeError(f"Backend '{name}' is not usable on this machine (missing package or GPU).")
+        raise RuntimeError(f"Backend '{name}' is not usable on this machine (missing package or GPU)." + _reasons())
     return _instance(name)
+
+
+def _reasons():
+    return "".join(f"\n{name} is installed but not usable: {why}" for name, why in _unusable_reason.items())
 
 
 def _instance(name):
