@@ -160,7 +160,8 @@ def test_register_volumes(shape):
     """Test the register_volumes function."""
     import scipy.ndimage
 
-    fixed = scipy.ndimage.gaussian_filter(np.random.rand(*shape).astype("float32"), sigma=1)
+    rng = np.random.default_rng(0)
+    fixed = scipy.ndimage.gaussian_filter(rng.random(shape, dtype=np.float32), sigma=1)
     moving = np.roll(fixed, shift=5, axis=0).copy()  # Simulate a simple shift
     recipe = warpfield.Recipe.from_yaml("default.yml")
 
@@ -173,10 +174,12 @@ def test_register_volumes(shape):
     registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend="auto", verbose=False)
 
     assert registered.shape == fixed.shape, "Registered volume shape mismatch."
-    assert (
-        np.abs(registered[10:-10, 10:-10, 10:-10] - fixed[10:-10, 10:-10, 10:-10]) < 0.2
-    ).mean() > 0.9, "Registered volume does not match the fixed volume."
-    assert warp_map is not None, "WarpMap object was not returned."
+    inner = (slice(10, -10),) * 3
+    err_registered = np.mean((registered[inner] - fixed[inner]) ** 2)
+    err_unregistered = np.mean((moving[inner] - fixed[inner]) ** 2)
+    assert err_registered < 0.01 * err_unregistered, f"Registration error {err_registered} vs {err_unregistered} before"
+    shift = np.median(_to_numpy(warp_map.warp_field)[(slice(None), *(slice(1, -1),) * 3)].reshape(3, -1), axis=1)
+    np.testing.assert_allclose(shift, [5, 0, 0], atol=0.1)
 
     if mlx_used:
         peak = mx.get_peak_memory() / 1024**3  # in GiB

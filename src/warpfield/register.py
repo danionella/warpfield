@@ -7,7 +7,7 @@ from typing import Any, Callable, List, Union
 import h5py
 import numpy as np
 import scipy.signal
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from tqdm.auto import tqdm
 
 from .backends import backend_of, get_array_backend, like_input, resolve_backend
@@ -259,9 +259,10 @@ class WarpMap:
             detJ: array of the spatial shape of the displacement field
         """
         B, xp = self.B, self.B.xp
-        scaling = B.asarray(units_per_voxel, B.float32) * self.block_stride
+        units = B.asarray(units_per_voxel, B.float32)
+        scaling = units * self.block_stride
         coords = B.indices(self.warp_field.shape[1:], B.float32) * scaling[:, None, None, None]
-        phi = coords + self.warp_field
+        phi = coords + self.warp_field * units[:, None, None, None]  # the displacement is in voxels
         spacing = [float(s) for s in B.to_numpy(scaling)]
         rows = [xp.stack(B.gradient(phi[i], *spacing, edge_order=edge_order), axis=-1) for i in range(3)]
         return B.det(xp.stack(rows, axis=-2))
@@ -354,7 +355,7 @@ class WarpMapper:
         ref_vol (array_like): The reference volume
         block_size (3-element list or numpy.array): shape of blocks, whose rigid displacement is estimated
         block_stride (3-element list or numpy.array): stride (usually identical to block_size)
-        proj_method (callable): Projection method, called as ``proj_method(vol_blocks, axis)``
+        proj_method (callable): Projection method, called as ``proj_method(vol_blocks, axis=axis)``
         backend (str or ArrayBackend, optional): backend to compute on (default: backend of ``ref_vol`` if it
             is a CuPy or MLX array, else the default GPU backend)
     """
@@ -388,7 +389,7 @@ class WarpMapper:
         block_stride = block_size if block_stride is None else np.array(block_stride)
         ref_blocks = B.sliding_block(B.asarray(ref_vol, B.float32), block_size, block_stride)
         self.blocks_shape = ref_blocks.shape
-        ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, iax), B.float32) for iax in [-3, -2, -1]]
+        ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, axis=iax), B.float32) for iax in [-3, -2, -1]]
         if self.tukey_alpha < 1:
             ref_blocks_proj = [
                 p
@@ -414,7 +415,7 @@ class WarpMapper:
         """
         B, xp = self.B, self.B.xp
         vol_blocks = B.sliding_block(vol, self.block_size, self.block_stride)
-        vol_blocks_proj = [B.asarray(self.proj_method(vol_blocks, iax), B.float32) for iax in [-3, -2, -1]]
+        vol_blocks_proj = [B.asarray(self.proj_method(vol_blocks, axis=iax), B.float32) for iax in [-3, -2, -1]]
         del vol_blocks
 
         disp_field = []
@@ -625,6 +626,8 @@ class Projector(BaseModel):
         periodic_smooth: if True, apply periodic-smooth decomposition to the projections. Default is False
     """
 
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
+
     max: bool = True
     normalize: Union[bool, float] = False
     dog: bool = True
@@ -666,6 +669,8 @@ class Smoother(BaseModel):
         shear (float): shear parameter for gaussian kernel. Default is None.
         long_range_ratio (float): long range ratio for double gaussian kernel. Default is 0.05.
     """
+
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
 
     sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
     shear: Union[float, None] = None
@@ -715,6 +720,8 @@ class RegFilter(BaseModel):
         soft_edge: size of a soft (Tukey) edge applied to the volume, in voxels. Default is 0
     """
 
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
+
     clip_thresh: float = 0
     dog: bool = True
     low: float = 0.5
@@ -758,6 +765,8 @@ class LevelConfig(BaseModel):
         update_rate (float): update rate for the displacement field. Default is 1.0. Can be lowered to dampen oscillations.
     """
 
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
+
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
     project: Union[Projector, Callable[[_ArrayType, int], _ArrayType]] = Projector()
@@ -776,6 +785,8 @@ class Recipe(BaseModel):
         reg_filter (RegFilter, callable or None): Filter to be applied to the reference volume
         levels (list): List of LevelConfig objects
     """
+
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
 
     pre_filter: Union[RegFilter, Callable[[_ArrayType], _ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [

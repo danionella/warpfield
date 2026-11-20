@@ -123,7 +123,7 @@ def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None):
             If None, a new array is created.
 
     All inputs are CuPy arrays (``CupyBackend.warp_volume`` converts them); none are copied unless they are not
-    C-contiguous float32.
+    C-contiguous float32. A non-contiguous ``out`` (e.g. a strided view) is filled via a temporary array.
 
     Returns:
         cupy.ndarray: Warped 3D volume.
@@ -133,6 +133,9 @@ def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None):
     if out is None:
         out = cp.zeros(vol.shape, dtype=vol.dtype)
     assert out.dtype == cp.dtype("float32")
+    target = out
+    if not out.flags.c_contiguous:  # the kernel writes `out` as a flat C-ordered array: use a temporary
+        out = cp.zeros(out.shape, dtype=f32)
     bpg = np.ceil(np.array(out.shape) / _TPB).astype("int").tolist()  # blocks per grid
     _warp_volume_kernel(
         tuple(bpg),
@@ -150,4 +153,6 @@ def warp_volume_cupy(vol, disp_field, disp_scale, disp_offset, out=None):
             cp.r_[out.shape].astype("int32"),
         ),
     )
-    return out
+    if target is not out:
+        target[...] = out
+    return target

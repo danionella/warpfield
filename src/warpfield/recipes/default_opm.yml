@@ -64,5 +64,5 @@ levels:
   #   smooth:
   #     sigmas: [0.5, 2.0, 8.0]
   #     long_range_ratio: 0.1
-  #   shear: 0.0
+  #     shear: 0.0
   #   repeats: 0 # enable if appropriate

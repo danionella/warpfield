@@ -102,12 +102,17 @@ def _instance(name):
 
 
 def backend_of(x) -> ArrayBackend:
-    """Return the backend an array belongs to (NumPy for anything that is not a CuPy or MLX array).
+    """Return the backend an array belongs to (NumPy for anything that is not a CuPy, MLX or CUDA array).
 
-    No usability check: an array that exists can always be converted, e.g. an MLX array when MLX runs on the
-    CPU or on CUDA, where the MLX backend cannot register (its warp kernel needs Metal).
+    Other CUDA arrays (PyTorch CUDA tensors, Numba, JAX, ...: anything with ``__cuda_array_interface__``) belong
+    to CuPy, which uses them without a copy, so results stay on the GPU (as CuPy arrays).
+
+    No usability check for CuPy and MLX arrays: an array that exists can always be converted, e.g. an MLX array
+    when MLX runs on the CPU or on CUDA, where the MLX backend cannot register (its warp kernel needs Metal).
     """
     module = type(x).__module__.split(".")[0]
+    if module not in ("cupy", "mlx") and hasattr(x, "__cuda_array_interface__") and _cupy_usable():
+        module = "cupy"
     return _instance(module if module in ("cupy", "mlx") else "numpy")
 
 

@@ -84,6 +84,7 @@ pip install --no-deps -e .
 
 ## Quickstart
 ```python
+import numpy as np
 import warpfield
 
 # 1. Load data (note: the two volumes are expected to be of the same resolution)
@@ -94,7 +95,7 @@ vol_mov, _ = warpfield.load_data("moving_volume.npy")
 recipe = warpfield.Recipe.from_yaml('default.yml')
 
 # 3. Register moving volume
-vol_mov_reg, warp_map, _ = warpfield.register_volume(vol_ref, vol_mov, recipe)
+vol_mov_reg, warp_map, _ = warpfield.register_volumes(vol_ref, vol_mov, recipe)
 
 # 4. Optional: apply the transformation to another volume (same shape and resolution)
 vol_another_reg = warp_map.apply(vol_another)
@@ -102,7 +103,7 @@ vol_another_reg = warp_map.apply(vol_another)
 # 5. Optional: apply inverse transformation to the reference volume
 vol_ref_reg = warp_map.invert().apply(vol_ref)
 
-# 6. Optional: apply the warp transformation to a set of coordiantes (3-by-n array, in units of volume voxels)
+# 6. Optional: apply the warp transformation to a set of coordinates (3-by-n array, in units of volume voxels)
 points = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
 points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.invert().push_coordinates(points) # inverse transformation
@@ -125,7 +126,7 @@ The pieces of a recipe (`RegFilter`, `Projector`, `Smoother`) are different: the
 > If the moving volume does not already have the same resolution (voxel size) as the fixed volume, you can use the convenience function [`warpfield.ndimage.zoom`](https://danionella.github.io/warpfield/warpfield/ndimage.html#zoom) to match scale:
 >
 > ```python
-> vol_mov = zoom(vol_mov, zoom_factors = voxel_size_moving/voxel_size_fixed) # voxel sizes are 3-tuples of floats
+> vol_mov = warpfield.ndimage.zoom(vol_mov, zoom_factors=np.array(voxel_size_moving) / np.array(voxel_size_fixed))  # voxel sizes: 3 floats each
 > ```
 
 ## Command-Line Interface (CLI)
@@ -145,26 +146,28 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For hierarchical storage formats (`.h5`, `.zarr`, `.n5`), specify the dataset name using the format `filename.h5/dataset_name`.
+- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For HDF5 files, specify the dataset as `filename.h5:dataset_name` (or `filename.h5/dataset_name`). For Zarr, give the path to the array, not to a group.
 - `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
 #### Optional Arguments
 
-- `--output`: Path to save the registered volume (`.h5`). Defaults to `<moving>_registered.h5` if not provided.
+- `--output`: Path to save the registered volume (`.h5`). Defaults to `<moving>_registered.h5` next to the moving file if not provided. Must not be one of the input files.
 - `--compression`: Compression method for saving the registered volume. Default is `gzip`.
-- `--invert`: Additionally, register the moving image to the fixed image.
+- `--invert`: Additionally, invert the warp map and warp the fixed image into the space of the moving image (saved as `/fixed_reg_inv`).
 - `--backend`: `cupy`, `mlx` or `numpy` (see [Backends](#backends)). Default is `auto`.
 
 #### Output Structure
 
 The output file is an HDF5 file containing the following datasets:
 - `/moving_reg`: The registered moving image.
-- `/warp_map`: A group containing the warp field and its metadata:
+- `/recipe_json`: The recipe used, as JSON.
+- `/warp_map`: A group containing the warp field and its metadata (load it with `warpfield.WarpMap.from_h5(path, group="warp_map")`):
   - `/warp_field`: The displacement field.
   - `/block_size`: The block size (in voxels).
   - `/block_stride`: The block stride (in voxels).
-- `/fixed_reg_inv` (optional): The fixed image registered to the moving image (if `--invert` is used).
+  - `/ref_shape`, `/mov_shape`: The shapes of the fixed and moving volumes.
+- `/fixed_reg_inv` (optional): The fixed image warped into the space of the moving image (if `--invert` is used).
 
 </details>
 
@@ -195,9 +198,9 @@ The registration pipeline is defined by a recipe. The recipe consists of a pre-f
 | `tukey_ref`    | if not None, apply a Tukey window to the reference projections (alpha = tukey_ref). Default is 0.5. The Tukey window can reduce block-edge effects. |
 | `smooth.sigmas`   | Sigmas for smoothing cross-correlations across blocks. Default is [1.0, 1.0, 1.0] blocks. |
 | `smooth.shear`    | Shear parameter (specific to oblique plane wobble – ignore otherwise). Default is None.                      |
-| `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is None. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
+| `smooth.long_range_ratio` | Long range ratio for double gaussian kernel. Default is 0.05. To deal with empty or low contrast regions, a second smooth with a larger (5x) sigma is applied to the cross-correlation maps and added. Typical values are between 0 (or None) and 0.1
 | `median_filter`   | If True, apply median filter to the displacement field. Default is True                  |
-| `affine`        | If True, fit affine transformation to the displacement field. Default is False. The affine fit ignores all edge voxels (to reduce edge effects) and therefore needs at least 4 blocks along each axis |
+| `affine`        | If True, fit an affine transformation to the displacement field (least squares over all block centers). Default is False. Needs at least 2 blocks along at least two axes; use at least 2 blocks along each axis to determine the full 3D transformation. The default affine level (`block_size: [-2, -2, -2]`, `block_stride: 0.5`) uses 3 blocks per axis. |
 | `update_rate`          | Update rate for the displacement field. Default is 1.0. This value can be lowered to dampen oscillations, if needed (rarely).|
 | `repeats`          | Number of iterations for this level. More repeats allow each block to deviate further from neighbors, despite smoothing. Typical values range from 1-10. Disable a level by setting repeats to 0.|
 
@@ -209,7 +212,7 @@ Recipes can be loaded from YAML files (either those shipped with this package, s
 ```python
 recipe = warpfield.Recipe.from_yaml("default.yml")
 # or your own recipe:
-# recipe = warpfield.recipes.from_yaml("path/to/your/recipe.yaml")
+# recipe = warpfield.Recipe.from_yaml("path/to/your/recipe.yaml")
 
 # You can then modify recipe parameters programmatically, e.g.;
 recipe.pre_filter.clip_thresh=10
