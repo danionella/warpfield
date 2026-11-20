@@ -3,6 +3,8 @@
 
 import os
 import subprocess
+import sys
+import warnings
 
 import pytest
 import numpy as np
@@ -207,7 +209,7 @@ def test_cli(tmp_path):
     # Run the CLI command
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "-m",
             "warpfield",
             "--fixed",
@@ -499,3 +501,210 @@ def test_copies_with_own_backend_object():
     vol = np.ones((6, 7, 8), "float32")
     warpfield.ndimage.soften_edges(vol, soft_edge=2, copy=True, backend=NumpyBackend())
     assert field.sum() == 0 and vol.min() == 1
+
+
+# ------------------------------------------------------------------------- bugs that were on main before #48
+@pytest.mark.parametrize("shape", [(5, 6, 8), (5, 7, 9), (4, 1, 8), (3, 6, 1)])
+def test_upsampled_dft_matches_direct_dft(backend, shape):
+    """The local upsampled DFT equals the inverse DFT of the full spectrum, for even and odd widths."""
+    B = get_array_backend(backend)
+    x = np.random.default_rng(0).random(shape).astype("float32")
+    M, N = shape[-2:]
+    off_y, off_x = np.array([0.5, -1.0, 2.0, 0, 1][: shape[0]]), np.array([1.0, 0.25, -2.0, 3, 0][: shape[0]])
+    out = warpfield.ndimage.upsampled_dft_rfftn(
+        B.rfft2(B.asarray(x)), (5, 7), upsample_factor=4, axis_offsets=(off_y, off_x), width=N
+    )
+    F = np.fft.fft2(x)
+    yy = off_y[:, None] + (np.arange(5) - 2)[None] / 4
+    xx = off_x[:, None] + (np.arange(7) - 3)[None] / 4
+    ky = np.exp(2j * np.pi * yy[:, :, None] * np.fft.fftfreq(M)[None, None])
+    kx = np.exp(2j * np.pi * xx[:, :, None] * np.fft.fftfreq(N)[None, None])
+    expected = np.einsum("bmM,bMN,bnN->bmn", ky, F, kx).real
+    np.testing.assert_allclose(_to_numpy(out), expected, atol=1e-3 * np.abs(expected).max())
+
+
+@pytest.mark.parametrize("block", [32, 31])
+def test_subpixel_shift_estimate(backend, block):
+    """Known sub-pixel shifts are found to within the 1/8-pixel grid on average over blocks (main was off by up to
+    ~0.4 px: the Hermitian half of the spectrum was mirrored with the rows off by one)."""
+    import scipy.ndimage
+
+    rng = np.random.default_rng(0)
+    for _ in range(4):
+        ref = scipy.ndimage.gaussian_filter(rng.random((64, 64, 64)), 2).astype("float32")
+        shift = rng.uniform(-3, 3, 3)
+        vol = np.fft.ifftn(scipy.ndimage.fourier_shift(np.fft.fftn(ref), shift)).real.astype("float32")
+        mapper = warpfield.register.WarpMapper(
+            ref, np.array([block] * 3), proj_method=warpfield.register.Projector(), backend=backend
+        )
+        est = _to_numpy(mapper.get_displacement(mapper.B.asarray(vol)).warp_field).reshape(3, -1).mean(1)
+        assert np.abs(est - shift).max() < 0.125, (est, shift)
+
+
+def test_tukey_ref_value_is_used(backend):
+    ref = np.random.default_rng(0).random((32, 32, 32)).astype("float32")
+
+    def ref_proj(alpha):
+        m = warpfield.register.WarpMapper(
+            ref, np.array([16] * 3), proj_method=warpfield.register.Projector(), tukey_alpha=alpha, backend=backend
+        )
+        return _to_numpy(m.ref_blocks_proj_ft_conj[0])
+
+    np.testing.assert_array_equal(ref_proj(None), ref_proj(0))  # None used to raise TypeError
+    assert not np.allclose(ref_proj(0.25), ref_proj(0.5))  # alpha used to be 0.5 whatever tukey_ref was
+    assert not np.allclose(ref_proj(1.0), ref_proj(0))  # tukey_ref=1 (Hann) used to switch the window off
+
+
+def test_sheared_kernel_with_zero_sigma():
+    from warpfield.ndimage import gausskernel_sheared
+
+    for sigma, shear in [([0, 1], 0), ([0, 1], 0.5), ([1, 0], 0.5), ([0, 0], 0.5), ([0, 1, 1], 0.3)]:
+        k = gausskernel_sheared(sigma, shear, truncate=4)
+        assert np.all(np.isfinite(k)) and np.isclose(k.sum(), 1), (sigma, shear)
+    # with zero width along axis 0, every column of the sheared line keeps its full weight
+    k = gausskernel_sheared([0, 1], 0.6, truncate=4)
+    g = np.exp(-0.5 * (np.arange(9) - 4.0) ** 2)
+    np.testing.assert_allclose(k.sum(0), g / g.sum(), atol=1e-6)
+    # zero sigma without shear leaves that axis unfiltered, as in gaussian_filter
+    k = gausskernel_sheared([0, 1.5], 0, truncate=4)
+    impulse = np.zeros((1, 13), "float32")
+    impulse[0, 6] = 1
+    np.testing.assert_allclose(k, warpfield.ndimage.scipy.ndimage.gaussian_filter(impulse, [0, 1.5]), atol=1e-6)
+
+
+def test_smoother_zero_sigma_with_shear(backend):
+    B = get_array_backend(backend)
+    x = B.asarray(np.random.default_rng(0).random((5, 6, 4, 9, 9)).astype("float32"))
+    sheared = warpfield.register.Smoother(sigmas=[0, 1.0, 1.0], shear=0.0)(x, block_size=[16, 16, 16])
+    plain = warpfield.register.Smoother(sigmas=[0, 1.0, 1.0], shear=None)(x, block_size=[16, 16, 16])
+    np.testing.assert_allclose(_to_numpy(sheared), _to_numpy(plain), atol=1e-5)
+    out = warpfield.register.Smoother(sigmas=[0, 1.0, 1.0], shear=0.5)(x, block_size=[16, 16, 16])
+    assert np.all(np.isfinite(_to_numpy(out)))
+
+
+def test_richardson_lucy_shear_zero_keeps_arguments(backend):
+    from warpfield.ndimage import richardson_lucy_gaussian, richardson_lucy_gaussian_shear
+
+    img = np.random.default_rng(0).random((12, 13, 14)).astype("float32") + 0.1
+    kw = dict(num_iter=3, epsilon=0.05, beta=0.5, initial_guess=np.full_like(img, 0.5), backend=backend)
+    np.testing.assert_allclose(
+        richardson_lucy_gaussian_shear(img, [1, 1, 1], 0, **kw), richardson_lucy_gaussian(img, [1, 1, 1], **kw)
+    )
+
+
+def test_block_stride_warning_checks_all_axes(backend):
+    fixed, moving = _small_volumes()
+    recipe = warpfield.Recipe()
+    recipe.levels = [
+        warpfield.register.LevelConfig(block_size=[32, 16, 32], repeats=1),
+        warpfield.register.LevelConfig(block_size=[32, 32, 32], repeats=1),  # coarser stride along axis 1 only
+    ]
+    with pytest.warns(UserWarning, match="block stride"):
+        warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+
+
+def test_video_without_pre_filter(backend, tmp_path):
+    pytest.importorskip("imageio_ffmpeg")
+    fixed, moving = _small_volumes()
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.pre_filter = None
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)  # "Video generation failed" is a warning
+        cb = lambda v: _to_numpy(v.max(0))  # noqa: E731
+        video = str(tmp_path / "v.mp4")
+        warpfield.register_volumes(fixed, moving, recipe, callback=cb, video_path=video, backend=backend, verbose=False)
+    assert (tmp_path / "v.mp4").exists()
+
+
+def test_cli_invert_warps_fixed_image(tmp_path):
+    """--invert applies the inverse map to the fixed image, which should then match the moving image."""
+    fixed, moving = _small_volumes(shift=3)
+    np.save(tmp_path / "fixed.npy", fixed)
+    np.save(tmp_path / "moving.npy", moving)
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.to_yaml(str(tmp_path / "recipe.yml"))
+    out = tmp_path / "out.h5"
+    args = ["--fixed", tmp_path / "fixed.npy", "--moving", tmp_path / "moving.npy", "--recipe", tmp_path / "recipe.yml"]
+    args += ["--output", out, "--invert", "--backend", "numpy"]
+    result = subprocess.run([sys.executable, "-m", "warpfield", *map(str, args)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    with h5py.File(out, "r") as f:
+        inner = (slice(8, -8),) * 3
+        err = np.abs(f["fixed_reg_inv"][:][inner] - moving[inner]).mean()
+        assert err < 0.2 * np.abs(fixed[inner] - moving[inner]).mean()
+
+
+def test_smoother_scalar_sigmas(backend):
+    B = get_array_backend(backend)
+    x = B.asarray(np.random.default_rng(0).random((5, 6, 4, 9, 9)).astype("float32"))
+    for shear in (None, 0.5):
+        scalar = warpfield.register.Smoother(sigmas=1.0, shear=shear)(x, block_size=[16, 16, 16])
+        listed = warpfield.register.Smoother(sigmas=[1.0, 1.0, 1.0], shear=shear)(x, block_size=[16, 16, 16])
+        np.testing.assert_array_equal(_to_numpy(scalar), _to_numpy(listed))
+
+
+def test_video_with_backend_callback_output(backend, tmp_path):
+    """A callback that returns arrays on the backend (e.g. CuPy) still gives a video."""
+    pytest.importorskip("imageio_ffmpeg")
+    fixed, moving = _small_volumes()
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        video = str(tmp_path / "v.mp4")
+        warpfield.register_volumes(
+            fixed, moving, recipe, callback=lambda v: v.max(0), video_path=video, backend=backend, verbose=False
+        )
+    assert (tmp_path / "v.mp4").exists()
+
+
+def test_video_when_frame_counter_fails(tmp_path, monkeypatch):
+    """Without fonts, ffmpeg's drawtext filter fails and imageio writes nothing without raising; the video must
+    then be written without the frame counter (simulated here with a filter that does not exist)."""
+    pytest.importorskip("imageio_ffmpeg")
+    monkeypatch.setattr(warpfield.utils, "_VIDEO_FILTER", "nosuchfilter")
+    fn = tmp_path / "v.mp4"
+    fn.write_bytes(b"old")  # an existing file must not count as written
+    frames = np.random.default_rng(0).random((3, 16, 16)).astype("float32")
+    warpfield.utils.create_rgb_video(str(fn), frames[0], frames)
+    assert fn.stat().st_size > 3
+    # if ffmpeg cannot write at all, the old file is kept and the error is raised (register_volumes turns it into a
+    # warning)
+    fn.write_bytes(b"old")
+    monkeypatch.setattr("imageio.mimsave", lambda *args, **kwargs: None)
+    with pytest.raises(ValueError):
+        warpfield.utils.create_rgb_video(str(fn), frames[0], frames)
+    assert fn.read_bytes() == b"old"
+
+
+def test_callback_views_are_kept(backend):
+    """A callback that returns a view of the volume (whose buffer is reused every step) gets one frame per step."""
+    fixed, moving = _small_volumes(shift=6)
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.levels[0].repeats = 2
+    from collections import namedtuple
+
+    pair = namedtuple("pair", "xy xz")
+    callbacks = (
+        lambda v: v[32],
+        lambda v: np.asarray(_to_numpy(v))[32],
+        lambda v: [v[32], v[:, 32]],
+        lambda v: pair(v[32], v[:, 32]),
+    )
+    for callback in callbacks:  # backend and NumPy views, also in containers
+        _, _, frames = warpfield.register_volumes(
+            fixed, moving, recipe, callback=callback, backend=backend, verbose=False
+        )
+        frames = [[_to_numpy(x) for x in (f if isinstance(f, (list, tuple)) else [f])] for f in frames]
+        assert len(frames) == 3
+        for first, last in zip(frames[0], frames[-1]):
+            assert not np.array_equal(first, last)
+
+
+def test_video_path_needs_callback(backend):
+    fixed, moving = _small_volumes()
+    with pytest.raises(ValueError, match="callback"):
+        warpfield.register_volumes(fixed, moving, warpfield.Recipe(), video_path="v.mp4", backend=backend)

@@ -5,8 +5,9 @@ import cupy as cp
 _warp_volume_kernel = cp.RawKernel(
     r"""
 
-__device__ int ravel3d(const int * shape, const int i, const int j, const int k){
-    return i * shape[1]*shape[2] + j * shape[2] + k;
+// 64-bit flat indices: volumes can have more than 2^31 voxels
+__device__ long long ravel3d(const int * shape, const int i, const int j, const int k){
+    return ((long long)i * shape[1] + j) * shape[2] + k;
 }
 
 // Extrapolation modes
@@ -33,8 +34,8 @@ __device__ float trilinear_interp(const float* arr, const int* shape,
     float zd = z - (float)z0;
 
     // Flattened 3D index
-    auto ravel3d = [](const int* shape, int x, int y, int z) {
-        return (x * shape[1] + y) * shape[2] + z;
+    auto ravel3d = [](const int* shape, int x, int y, int z) -> long long {
+        return ((long long)x * shape[1] + y) * shape[2] + z;
     };
 
     // Inline voxel sampling with extrapolation
@@ -91,7 +92,7 @@ extern "C" __global__ void warp_volume_kernel(const float * arr, const int * arr
                 d0 = trilinear_interp(disp_field0, disp_field_shape, x, y, z, EXTRAP_LINEAR);
                 d1 = trilinear_interp(disp_field1, disp_field_shape, x, y, z, EXTRAP_LINEAR);
                 d2 = trilinear_interp(disp_field2, disp_field_shape, x, y, z, EXTRAP_LINEAR);
-                int idx = ravel3d(out_shape, i,j,k);
+                long long idx = ravel3d(out_shape, i,j,k);
                 out[idx] = trilinear_interp(arr, arr_shape, (float)i+d0, (float)j+d1, (float)k+d2, EXTRAP_ZERO);
             }
         }

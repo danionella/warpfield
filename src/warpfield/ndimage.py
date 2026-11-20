@@ -110,15 +110,26 @@ def gausskernel_sheared(sigma, shear=0, truncate=3):
     Returns:
         window (numpy.ndarray): n-dimensional window
     """
-    shape = (np.r_[sigma] * truncate * 2).astype("int")
+    sigma = np.r_[sigma]
+    shape = (sigma * truncate * 2).astype("int")
     shape[0] = np.maximum(shape[0], int(np.ceil(shape[1] * np.abs(shear))))
+    if sigma[0] == 0 and shear != 0:  # room for the whole line below, plus 1 voxel for its linear interpolation
+        shape[0] = 2 * (int(np.ceil(np.abs(shear) * (shape[1] // 2))) + 1)
     shape = (shape // 2) * 2 + 1
+    # A sigma of 0 leaves that axis unfiltered, as in gaussian_filter: the axis has length 1 (in units of voxels,
+    # hence the division by 1), or, for axis 0 with shear, the kernel is a line (see below).
+    safe = np.where(sigma == 0, 1, sigma)
     grid = np.indices(shape).astype("float32")
     for dim in range(len(grid)):
         grid[dim] -= shape[dim] // 2
-        grid[dim] /= sigma[dim]
-    grid[0] = grid[0] + shear * grid[1] * sigma[1] / sigma[0]
-    out = np.exp(-(grid**2).sum(0) / 2)
+        grid[dim] /= safe[dim]
+    if sigma[0] > 0:
+        grid[0] = grid[0] + shear * grid[1] * safe[1] / sigma[0]
+        out = np.exp(-(grid**2).sum(0) / 2)
+    else:
+        # zero width along axis 0: the line x0 = -shear * x1, sampled with linear interpolation
+        line = np.maximum(0, 1 - np.abs(grid[0] + shear * grid[1] * safe[1]))
+        out = line * np.exp(-(grid[1:] ** 2).sum(0) / 2)
     out /= out.sum()
     return out
 
@@ -213,7 +224,7 @@ def sliding_block(data, block_size=100, block_stride=1):
     return backend_of(data).sliding_block(data, block_size, block_stride)
 
 
-def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, axis_offsets=None):
+def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, axis_offsets=None, width=None):
     """
     Performs an upsampled inverse DFT on a small region around given offsets,
     taking as input the output of rfftn (real-to-complex FFT).
@@ -229,6 +240,8 @@ def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, a
         upsample_factor: The integer upsampling factor in each axis.
         axis_offsets: The centers of the patches in original-pixel coordinates
             (off_y, off_x), each of shape (B,). If None, defaults to (0, 0).
+        width: Width N of the original real image (``rfftn`` cannot tell an even width from the odd width one
+            smaller). Default: ``2 * (Nf - 1)``.
 
     Returns:
         The real part of the upsampled inverse DFT patches, shape (B, m, n), on the same backend as ``data``.
@@ -239,12 +252,17 @@ def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, a
         raise ValueError("Input must have at least 2 dimensions")
     *batch_shape, M, Nf = data.shape
     m, n = (upsampled_region_size,) * 2 if isinstance(upsampled_region_size, int) else upsampled_region_size
-    N = (Nf - 1) * 2  # full width of original image
+    N = (Nf - 1) * 2 if width is None else int(width)  # full width of original image
+    if N // 2 + 1 != Nf:
+        raise ValueError(f"width {N} does not match the rfft width {Nf}")
 
-    # reconstruct full complex FFT via Hermitian symmetry
+    # reconstruct the full complex FFT via Hermitian symmetry: X[k, l] = conj(X[-k mod M, N - l]) for l >= Nf
     full = B.asarray(data, B.complex64)
-    if Nf > 1:
-        full = xp.concatenate([full, xp.conj(full[..., :, 1:-1][..., ::-1, ::-1])], axis=-1)
+    if N > Nf:
+        mirror = full[..., :, 1 : N - Nf + 1][..., ::-1]  # columns N - l for l = Nf, ..., N - 1
+        mirror = xp.concatenate([mirror[..., :1, :], mirror[..., 1:, :][..., ::-1, :]], axis=-2)  # rows -k mod M
+        full = xp.concatenate([full, xp.conj(mirror)], axis=-1)
+        del mirror  # as large as half the spectrum: free it before the DFT steps
     full = xp.reshape(full, (-1, M, N))
 
     # sample coordinates around offsets (high precision where the device has it, as on CuPy)
@@ -563,7 +581,9 @@ def richardson_lucy_gaussian_shear(
     """
     B = resolve_backend(img, backend)
     if shear == 0:
-        return richardson_lucy_gaussian(img, sigmas, num_iter, backend=B)
+        return richardson_lucy_gaussian(
+            img, sigmas, num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess, backend=B
+        )
 
     gw = gausskernel_sheared(np.array(sigmas), shear=shear, truncate=4).astype("float32")
     gw01 = gw.sum(2)[:, :, None]
