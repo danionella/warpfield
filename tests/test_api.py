@@ -199,6 +199,19 @@ def test_cli_with_zarr_array_path(tmp_path):
     assert not (tmp_path / "data.zarr" / "moving_registered.h5").exists()
 
 
+def test_load_matlab_variable(tmp_path):
+    """`file.mat:variable` loads the variable and reports the file as the path."""
+    import scipy.io
+
+    vol = np.arange(60, dtype="float32").reshape(3, 4, 5)
+    scipy.io.savemat(tmp_path / "v.mat", {"vol": vol})
+    data, info = warpfield.load_data(f"{tmp_path / 'v.mat'}:vol")
+    np.testing.assert_array_equal(data, vol)
+    assert info["path"] == str(tmp_path / "v.mat") and info["key"] == "vol"
+    with pytest.raises(ValueError, match="not found"):
+        warpfield.load_data(f"{tmp_path / 'v.mat'}:missing")
+
+
 # ------------------------------------------------------------------------------------------------------ docs
 def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""
