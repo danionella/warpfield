@@ -212,6 +212,31 @@ def test_load_matlab_variable(tmp_path):
         warpfield.load_data(f"{tmp_path / 'v.mat'}:missing")
 
 
+def _write_mat_v73(path, **arrays):
+    """A minimal MATLAB v7.3 file: HDF5 with a 512-byte user block that starts with the MAT-file header."""
+    with h5py.File(path, "w", userblock_size=512) as f:
+        for name, a in arrays.items():
+            f[name] = a.T  # MATLAB writes column-major data, which HDF5 sees with the axes reversed
+    header = b"MATLAB 7.3 MAT-file, Platform: GLNXA64, Created on: Fri Nov 20 00:00:00 2026 HDF5 schema 1.00 ."
+    with open(path, "r+b") as f:
+        f.write(header.ljust(116) + b"\0" * 8 + b"\x00\x02IM")  # version 0x0200, little-endian marker "IM"
+
+
+def test_load_matlab_v73_variable(tmp_path):
+    """v7.3 files (HDF5 inside) load with the axes as in MATLAB, like older versions do through loadmat."""
+    import scipy.io
+
+    vol = np.arange(60, dtype="float32").reshape(3, 4, 5)
+    _write_mat_v73(tmp_path / "v73.mat", vol=vol)
+    with pytest.raises(NotImplementedError):  # what loadmat says about v7.3 files
+        scipy.io.loadmat(tmp_path / "v73.mat")
+    data, info = warpfield.load_data(f"{tmp_path / 'v73.mat'}:vol")
+    np.testing.assert_array_equal(data, vol)
+    assert info["path"] == str(tmp_path / "v73.mat") and info["key"] == "vol"
+    with pytest.raises(ValueError, match="not found"):
+        warpfield.load_data(f"{tmp_path / 'v73.mat'}:missing")
+
+
 # ------------------------------------------------------------------------------------------------------ docs
 def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""

@@ -96,13 +96,23 @@ def load_data(file_path: str):
 
     elif ".mat:" in file_path:
         from scipy.io import loadmat
+        from scipy.io.matlab import matfile_version
 
         split_index = file_path.rfind(":")  # the last colon, as for HDF5 (Windows paths start with e.g. C:)
         file_path, variable_name = file_path[:split_index], file_path[split_index + 1 :]
-        mat_data = loadmat(file_path)
-        if variable_name not in mat_data:
-            raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
-        data = mat_data[variable_name]
+        not_found = ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
+        if matfile_version(file_path)[0] == 2:
+            # v7.3 (MATLAB's format for variables over 2 GB) is HDF5. MATLAB stores arrays in column-major order,
+            # so HDF5 sees the axes reversed: transpose to get the array as MATLAB (and loadmat) shows it.
+            with h5py.File(file_path, "r") as f:
+                if variable_name not in f:
+                    raise not_found
+                data = np.array(f[variable_name]).T
+        else:
+            mat_data = loadmat(file_path, variable_names=[variable_name])
+            if variable_name not in mat_data:
+                raise not_found
+            data = mat_data[variable_name]
         return data, dict(filetype="matlab", path=file_path, key=variable_name, meta={})
 
     elif file_path.endswith(".nrrd") or file_path.endswith(".nhdr"):
