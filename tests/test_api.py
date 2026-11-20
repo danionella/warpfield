@@ -238,9 +238,10 @@ def test_load_matlab_v73_variable(tmp_path):
 
 
 @pytest.mark.parametrize("fmt", ["h5", "mat", "mat73", "zarr"])
-@pytest.mark.parametrize("sep", [":", "/"])
+@pytest.mark.parametrize("sep", [":", "/", "\\"])
 def test_load_data_name_after_file(tmp_path, fmt, sep):
-    """HDF5, MATLAB and Zarr all take the dataset/variable/array after the file name, with `:` or `/`."""
+    """HDF5, MATLAB and Zarr all take the dataset/variable/array after the file name, with `:` or `/` (or `\\`, as
+    in Windows paths)."""
     import scipy.io
 
     vol = np.arange(60, dtype="float32").reshape(3, 4, 5)
@@ -258,7 +259,8 @@ def test_load_data_name_after_file(tmp_path, fmt, sep):
         zarr = pytest.importorskip("zarr")
         path, name = tmp_path / "d.zarr", "grp/vol"
         zarr.open_group(str(path), mode="w").create_array(name, data=vol)
-    data, info = warpfield.load_data(f"{path}{sep}{name}")
+    given = name.replace("/", sep) if sep == "\\" else name  # Windows style: backslashes inside the name too
+    data, info = warpfield.load_data(f"{path}{sep}{given}")
     np.testing.assert_array_equal(data, vol)
     assert info["path"] == str(path) and info["key"] == name
 

@@ -23,10 +23,11 @@ def _split_container_path(file_path, extensions, is_dir=False):
     If several parts of the path end in a matching extension (e.g. a folder ``exp.h5/`` holding ``x.h5``), the first
     one that exists on disk as a file (as a folder if ``is_dir``, for Zarr stores) is taken.
     """
-    pattern = r"\.(?:%s)(?=[:/]|$)" % "|".join(re.escape(e.lstrip(".")) for e in extensions)
+    # separators: ":" and "/", and "\\" for Windows paths such as str(Path("data.zarr") / "array")
+    pattern = r"\.(?:%s)(?=[:/\\]|$)" % "|".join(re.escape(e.lstrip(".")) for e in extensions)
     candidates = []
     for m in re.finditer(pattern, file_path):
-        name = file_path[m.end() + 1 :] if m.end() < len(file_path) else None
+        name = file_path[m.end() + 1 :].replace("\\", "/") if m.end() < len(file_path) else None
         candidates.append((file_path[: m.end()], name or None))
     if not candidates:
         return None
