@@ -1,4 +1,5 @@
 import io
+import os
 import h5py
 import warnings
 import hdf5plugin
@@ -125,6 +126,12 @@ def load_data(file_path: str):
         raise ValueError(f"Unsupported file type: {file_path}")
 
 
+_VIDEO_FILTER = (
+    r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,"
+    r"format=yuv420p"
+)
+
+
 def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     """
     Create an RGB video from three separate channels (R, G, B).
@@ -155,13 +162,26 @@ def create_rgb_video(fn, reference, moving, fps=10, quality=9):
     # clip to shape divisible by 2
     rgb = rgb[:, : (rgb.shape[1] - (rgb.shape[1] % 2)), : (rgb.shape[2] - (rgb.shape[2] % 2))]
 
-    vf = r"drawtext=text='# %{n}':x=w-text_w-10:y=h-text_h-10:fontsize=12:fontcolor=white:borderw=1:bordercolor=black,format=yuv420p"
+    frames = np.clip(rgb * 255, 0, 255).astype("uint8")
+
+    def written(since):  # whether fn was (re)written: a failed ffmpeg run leaves an existing fn untouched
+        return os.path.exists(fn) and os.stat(fn).st_mtime_ns != since and os.path.getsize(fn) > 0
+
+    before = os.stat(fn).st_mtime_ns if os.path.exists(fn) else None
+    # The frame counter (ffmpeg's drawtext filter) needs fontconfig. Without it (e.g. on many cluster nodes) imageio
+    # neither raises nor writes anything, so write again without the counter.
     try:
-        imageio.mimsave(
-            fn, np.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality, ffmpeg_params=["-vf", vf]
-        )
+        imageio.mimsave(fn, frames, fps=fps, quality=quality, ffmpeg_params=["-vf", _VIDEO_FILTER])
+        ok = written(before)
     except Exception:
-        imageio.mimsave(fn, np.clip(rgb * 255, 0, 255).astype("uint8"), fps=fps, quality=quality)
+        ok = False
+    if not ok:
+        try:
+            imageio.mimsave(fn, frames, fps=fps, quality=quality)
+        except Exception as e:
+            raise ValueError(f"ffmpeg could not write the video to {fn}: {e}") from e
+        if not written(before):
+            raise ValueError(f"ffmpeg could not write the video to {fn}")
 
 
 def get_mips(data, units_per_voxel=[1, 1, 1], width=800, axes=[0, 1, 2]):

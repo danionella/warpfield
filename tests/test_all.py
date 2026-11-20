@@ -655,3 +655,53 @@ def test_video_with_backend_callback_output(backend, tmp_path):
             fixed, moving, recipe, callback=lambda v: v.max(0), video_path=video, backend=backend, verbose=False
         )
     assert (tmp_path / "v.mp4").exists()
+
+
+def test_video_when_frame_counter_fails(tmp_path, monkeypatch):
+    """Without fonts, ffmpeg's drawtext filter fails and imageio writes nothing without raising; the video must
+    then be written without the frame counter (simulated here with a filter that does not exist)."""
+    pytest.importorskip("imageio_ffmpeg")
+    monkeypatch.setattr(warpfield.utils, "_VIDEO_FILTER", "nosuchfilter")
+    fn = tmp_path / "v.mp4"
+    fn.write_bytes(b"old")  # an existing file must not count as written
+    frames = np.random.default_rng(0).random((3, 16, 16)).astype("float32")
+    warpfield.utils.create_rgb_video(str(fn), frames[0], frames)
+    assert fn.stat().st_size > 3
+    # if ffmpeg cannot write at all, the old file is kept and the error is raised (register_volumes turns it into a
+    # warning)
+    fn.write_bytes(b"old")
+    monkeypatch.setattr("imageio.mimsave", lambda *args, **kwargs: None)
+    with pytest.raises(ValueError):
+        warpfield.utils.create_rgb_video(str(fn), frames[0], frames)
+    assert fn.read_bytes() == b"old"
+
+
+def test_callback_views_are_kept(backend):
+    """A callback that returns a view of the volume (whose buffer is reused every step) gets one frame per step."""
+    fixed, moving = _small_volumes(shift=6)
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.levels[0].repeats = 2
+    from collections import namedtuple
+
+    pair = namedtuple("pair", "xy xz")
+    callbacks = (
+        lambda v: v[32],
+        lambda v: np.asarray(_to_numpy(v))[32],
+        lambda v: [v[32], v[:, 32]],
+        lambda v: pair(v[32], v[:, 32]),
+    )
+    for callback in callbacks:  # backend and NumPy views, also in containers
+        _, _, frames = warpfield.register_volumes(
+            fixed, moving, recipe, callback=callback, backend=backend, verbose=False
+        )
+        frames = [[_to_numpy(x) for x in (f if isinstance(f, (list, tuple)) else [f])] for f in frames]
+        assert len(frames) == 3
+        for first, last in zip(frames[0], frames[-1]):
+            assert not np.array_equal(first, last)
+
+
+def test_video_path_needs_callback(backend):
+    fixed, moving = _small_volumes()
+    with pytest.raises(ValueError, match="callback"):
+        warpfield.register_volumes(fixed, moving, warpfield.Recipe(), video_path="v.mp4", backend=backend)

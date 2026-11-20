@@ -262,6 +262,7 @@ def upsampled_dft_rfftn(data, upsampled_region_size, upsample_factor: int = 1, a
         mirror = full[..., :, 1 : N - Nf + 1][..., ::-1]  # columns N - l for l = Nf, ..., N - 1
         mirror = xp.concatenate([mirror[..., :1, :], mirror[..., 1:, :][..., ::-1, :]], axis=-2)  # rows -k mod M
         full = xp.concatenate([full, xp.conj(mirror)], axis=-1)
+        del mirror  # as large as half the spectrum: free it before the DFT steps
     full = xp.reshape(full, (-1, M, N))
 
     # sample coordinates around offsets (high precision where the device has it, as on CuPy)

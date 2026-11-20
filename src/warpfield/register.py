@@ -347,6 +347,20 @@ class WarpMap:
         return cls(warp_field, block_size, block_stride, ref_shape, mov_shape, backend=backend)
 
 
+def _own_output(out, buf):
+    """Copy callback outputs that may share memory with the volume buffer ``buf``, which is reused every step:
+    ``buf`` itself and views (e.g. ``lambda v: v[32]``, or ``np.asarray(v)[32]`` on MLX), also inside lists, tuples
+    and dicts. New arrays (e.g. ``v.max(0)``) are kept as they are. MLX slices are copies, so need no copy."""
+    if isinstance(out, (list, tuple)):
+        items = [_own_output(o, buf) for o in out]
+        return type(out)(*items) if hasattr(out, "_fields") else type(out)(items)  # named tuples take *items
+    if isinstance(out, dict):
+        return {k: _own_output(v, buf) for k, v in out.items()}
+    if out is buf or getattr(out, "base", None) is not None:
+        return backend_of(out).copy(out)
+    return out
+
+
 class WarpMapper:
     """Class that estimates warp field using cross-correlation, based on a piece-wise rigid model.
 
@@ -528,7 +542,7 @@ class RegistrationPyramid:
         vol_tmp = warp_map._warp(vol_tmp0)
         min_block_stride = np.min([mapper.block_stride for mapper in self.mappers], axis=0)
         if callback is not None:
-            callback_output.append(callback(vol_tmp))
+            callback_output.append(_own_output(callback(vol_tmp), vol_tmp))
 
         if np.any(self.mappers[-1].block_stride > min_block_stride):
             warnings.warn(
@@ -559,7 +573,7 @@ class RegistrationPyramid:
                 warp_map = warp_map.chain(wm)
                 vol_tmp = warp_map._warp(vol_tmp0, out=vol_tmp)
                 if callback is not None:
-                    callback_output.append(callback(vol_tmp))
+                    callback_output.append(_own_output(callback(vol_tmp), vol_tmp))
                 # also evaluates the callback outputs: on lazy backends (MLX) an unevaluated output would keep
                 # the vol_tmp of its step alive (outputs that are already evaluated cost nothing)
                 B.end_step(vol_tmp, warp_map.warp_field, callback_output)
@@ -596,6 +610,8 @@ def register_volumes(
         - list: List of outputs from the callback function
     """
     recipe.model_validate(recipe.model_dump())
+    if video_path is not None and callback is None:
+        raise ValueError("video_path needs a callback that returns 2D frames, e.g. warpfield.utils.mips_callback()")
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask, backend=backend)
     B = reg.B
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
@@ -614,7 +630,7 @@ def register_volumes(
             ref = to_np(callback(ref))
             vmax = np.percentile(ref, 99.9).item() if vmax is None else vmax
             create_rgb_video(video_path, ref / vmax, np.array([to_np(c) for c in cbout]) / vmax, fps=10)
-        except (ValueError, AssertionError) as e:
+        except (ValueError, AssertionError) as e:  # create_rgb_video raises ValueError if ffmpeg fails
             warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
 
