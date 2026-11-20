@@ -5,7 +5,7 @@ import numpy as np
 import h5py
 import hdf5plugin
 
-from .utils import load_data
+from .utils import load_data, set_backend
 from .register import register_volumes, Recipe
 
 # Configure logging
@@ -56,6 +56,7 @@ def main():
         "--backend", default="auto", help="Backend to compute on: `cupy`, `mlx` or `numpy` (CPU, slow). Default: auto (first available GPU backend)."
     )
     args = parser.parse_args()
+    set_backend(args.backend)
 
     # load
     logging.info(f"Loading fixed image from {args.fixed}...")
@@ -70,7 +71,7 @@ def main():
 
     # register
     logging.info("Registering the moving image to the fixed image...")
-    registered_image, warp_map, _ = register_volumes(fixed_image, moving_image, recipe, backend=args.backend, verbose=True)
+    registered_image, warp_map, _ = register_volumes(fixed_image, moving_image, recipe, verbose=True)
 
     if args.invert:
         logging.info("Inverting the warp map...")

@@ -1,8 +1,8 @@
-"""Choosing an array backend.
+"""Choosing the array backend.
 
-``get_array_backend("auto")`` returns the first usable GPU backend (CuPy, then MLX). The NumPy backend runs
-on the CPU and is only used when asked for by name, so registration never silently falls back to a
-slow CPU path.
+warpfield runs on one backend per process (``current_backend``): the one set with ``set_array_backend``, else
+the first usable GPU backend (CuPy, then MLX). The NumPy backend runs on the CPU and is only used when set by
+name, so registration never silently falls back to a slow CPU path.
 """
 
 from functools import lru_cache
@@ -77,9 +77,10 @@ def available_array_backends():
     return [name for name in (*_GPU_PREFERENCE, "numpy") if _USABLE[name]()]
 
 
-def set_default_array_backend(name):
-    """Set the backend that ``"auto"`` resolves to ("cupy", "mlx" or "numpy"). "auto" or None restores automatic
-    selection."""
+def set_array_backend(name):
+    """Set the backend warpfield runs on: "cupy", "mlx" or "numpy" (CPU, slow). "auto" or None restores the
+    automatic choice (the first available GPU backend). Arrays and WarpMaps created before keep their backend,
+    so set it before you start."""
     global _default
     if name in (None, "auto", "default"):
         _default = None
@@ -103,7 +104,7 @@ def get_array_backend(backend="auto") -> ArrayBackend:
             raise RuntimeError(
                 "No GPU backend found. warpfield needs CuPy with a CUDA GPU (pip install 'warpfield[cuda12]' or "
                 "'warpfield[cuda13]', matching your CUDA driver), or MLX on Apple Silicon. "
-                "Pass backend='numpy' to run on the CPU (slow)." + _reasons()
+                "Call warpfield.set_backend('numpy') to run on the CPU (slow)." + _reasons()
             )
     if name in _USABLE and not _USABLE[name]():
         raise RuntimeError(f"Backend '{name}' is not usable on this machine (missing package or GPU)." + _reasons())
@@ -135,17 +136,9 @@ def backend_of(x) -> ArrayBackend:
     return _instance(module if module in ("cupy", "mlx") else "numpy")
 
 
-def resolve_backend(x, backend=None) -> ArrayBackend:
-    """Backend to compute ``x`` on.
-
-    A backend given by name (or object) wins. Otherwise a CuPy or MLX array stays on its own backend, and
-    anything else (NumPy arrays, lists) goes to the default GPU backend.
-    """
-    if backend not in (None, "auto", "default"):
-        return get_array_backend(backend)
-    name = backend_of(x).name
-    # by name, so an MLX array on a machine where MLX cannot run the registration gives a clear error here
-    return get_array_backend("auto" if name == "numpy" else name)
+def current_backend() -> ArrayBackend:
+    """The backend warpfield runs on: the one set with ``set_array_backend``, else the first usable GPU backend."""
+    return get_array_backend("auto")
 
 
 def like_input(out, inp):

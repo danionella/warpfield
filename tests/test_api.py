@@ -18,7 +18,10 @@ requires_cupy = pytest.mark.skipif("cupy" not in BACKENDS, reason="CuPy with CUD
 
 @pytest.fixture(params=BACKENDS)
 def backend(request):
-    return request.param
+    """Runs the test on each available backend (set for the whole process, as users do)."""
+    warpfield.set_backend(request.param)
+    yield request.param
+    warpfield.set_backend("auto")
 
 
 def _to_numpy(x):
@@ -60,14 +63,16 @@ def test_recipe_yaml_roundtrip(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ WarpMap
-@pytest.mark.parametrize("stride, units", [([1, 1, 1], [1, 1, 1]), ([4, 2, 4], [1, 1, 1]), ([2, 2, 2], [1, 1, 4]), ([4, 4, 4], [2, 3, 2])])
+@pytest.mark.parametrize(
+    "stride, units", [([1, 1, 1], [1, 1, 1]), ([4, 2, 4], [1, 1, 1]), ([2, 2, 2], [1, 1, 4]), ([4, 4, 4], [2, 3, 2])]
+)
 def test_jacobian_det_with_stride_and_units(backend, stride, units):
     """A displacement u = a * x (in voxels) has det J = prod(1 + a), whatever the grid stride and voxel size."""
     a = np.array([0.2, -0.1, 0.05])
     shape = (7, 8, 9)
     idx = np.indices(shape, dtype=np.float32)
     warp_field = np.stack([a[i] * idx[i] * stride[i] for i in range(3)]).astype("float32")  # in voxels
-    wm = warpfield.WarpMap(warp_field, stride, stride, (32,) * 3, (32,) * 3, backend=backend)
+    wm = warpfield.WarpMap(warp_field, stride, stride, (32,) * 3, (32,) * 3)
     det = _to_numpy(wm.jacobian_det(units_per_voxel=units))
     np.testing.assert_allclose(det[1:-1, 1:-1, 1:-1], np.prod(1 + a), rtol=1e-4)
 
@@ -78,8 +83,51 @@ def test_projector_callable_called_with_axis_keyword(backend):
     recipe = warpfield.Recipe()
     recipe.levels = recipe.levels[:1]
     recipe.levels[0].project = lambda vol_blocks, *, axis: warpfield.register.Projector()(vol_blocks, axis)
-    _, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+    _, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
     np.testing.assert_allclose(_to_numpy(warp_map.warp_field)[0].mean(), 3.0, atol=0.1)
+
+
+def test_recipe_pieces_run_on_current_backend(backend, monkeypatch):
+    """RegFilter, Projector and Smoother compute on the backend warpfield runs on, also for NumPy input (as in
+    0.2, recipe.pre_filter(vol) uses the GPU), and return NumPy for NumPy input."""
+    from warpfield.backends import get_array_backend
+
+    B = get_array_backend(backend)
+    calls = []
+    gaussian_filter = B.gaussian_filter
+    monkeypatch.setattr(B, "gaussian_filter", lambda *a, **k: calls.append(1) or gaussian_filter(*a, **k))
+    rng = np.random.default_rng(0)
+    vol = rng.random((16, 16, 16)).astype("float32")
+    blocks = rng.random((2, 2, 2, 8, 8, 8)).astype("float32")
+    xcorr = rng.random((2, 2, 2, 9, 9)).astype("float32")
+    out = [
+        warpfield.register.RegFilter()(vol),
+        warpfield.register.Projector()(blocks, axis=-1),
+        warpfield.register.Smoother()(xcorr, np.array([8, 8, 8])),
+    ]
+    assert all(isinstance(o, np.ndarray) for o in out)
+    assert len(calls) >= 3
+
+
+@pytest.mark.skipif(len(BACKENDS) < 2, reason="needs a GPU backend besides NumPy")
+def test_warpmap_follows_backend_switch():
+    """A WarpMap made before warpfield.set_backend() computes on the new backend afterwards, and so do the maps
+    derived from it (one backend per process, also for existing maps)."""
+    gpu = BACKENDS[0]
+    fixed, moving = _small_volumes()
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    try:
+        warpfield.set_backend(gpu)
+        registered, wm, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
+        assert backend_of(wm.warp_field).name == gpu
+        warpfield.set_backend("numpy")
+        assert wm.B.name == "numpy" and isinstance(wm.warp_field, np.ndarray)
+        np.testing.assert_allclose(wm.warp(moving), registered, atol=1e-4)
+        for derived in [wm.invert_fast(), wm.chain(wm), wm.median_filter()]:
+            assert derived.B.name == "numpy" and isinstance(derived.warp_field, np.ndarray)
+    finally:
+        warpfield.set_backend("auto")
 
 
 # --------------------------------------------------------------------------------------------- CuPy specifics
@@ -90,9 +138,13 @@ def test_registration_cupy_matches_numpy():
     recipe = warpfield.Recipe()
     recipe.add_level(block_size=[32, 32, 32], block_stride=0.5, repeats=2)
     fields = {}
-    for name in ["cupy", "numpy"]:
-        _, wm, _ = warpfield.register_volumes(fixed, moving, recipe, backend=name, verbose=False)
-        fields[name] = _to_numpy(wm.warp_field)
+    try:
+        for name in ["cupy", "numpy"]:
+            warpfield.set_backend(name)
+            _, wm, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
+            fields[name] = _to_numpy(wm.warp_field)
+    finally:
+        warpfield.set_backend("auto")
     np.testing.assert_allclose(fields["cupy"], fields["numpy"], atol=1e-3)
 
 
@@ -102,7 +154,7 @@ def test_cupy_warp_into_strided_out():
     import cupy as cp
 
     vol = cp.random.default_rng(0).random((20, 21, 22), dtype=cp.float32)
-    wm = warpfield.WarpMap(np.zeros((3, 2, 2, 2)), [10, 11, 11], [10, 11, 11], vol.shape, vol.shape, backend="cupy")
+    wm = warpfield.WarpMap(np.zeros((3, 2, 2, 2)), [10, 11, 11], [10, 11, 11], vol.shape, vol.shape)
     buf = cp.zeros((20, 21, 44), dtype=cp.float32)
     out = buf[:, :, ::2]
     result = wm.warp(vol, out=out)
@@ -136,7 +188,12 @@ def test_cuda_array_interface_inputs_stay_on_gpu():
     assert isinstance(dogfilter(x), cp.ndarray)
     np.testing.assert_allclose(backend_of(x).to_numpy(x), vol.get())
     # and the NumPy backend can still take them
-    np.testing.assert_allclose(_to_numpy(dogfilter(x, backend="numpy")), _to_numpy(dogfilter(vol)), atol=1e-4)
+    expected = _to_numpy(dogfilter(vol))
+    try:
+        warpfield.set_backend("numpy")
+        np.testing.assert_allclose(_to_numpy(dogfilter(x)), expected, atol=1e-4)
+    finally:
+        warpfield.set_backend("auto")
 
 
 # ------------------------------------------------------------------------------------------------------- CLI

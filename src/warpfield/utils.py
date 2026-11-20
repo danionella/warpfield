@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .backends import available_array_backends as get_available_backends  # noqa: F401 (public name)
 from .backends import backend_of
-from .backends import set_default_array_backend as set_default_backend  # noqa: F401 (public name)
+from .backends import set_array_backend as set_backend  # noqa: F401 (public name)
 
 
 def _split_container_path(file_path, extensions, is_dir=False):

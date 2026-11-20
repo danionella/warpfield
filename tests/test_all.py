@@ -15,7 +15,7 @@ import tifffile
 import warpfield
 from warpfield.utils import load_data
 
-from warpfield.backends import available_array_backends, backend_of, get_array_backend
+from warpfield.backends import available_array_backends, backend_of, current_backend, get_array_backend
 
 
 def _to_numpy(x):
@@ -29,7 +29,10 @@ requires_gpu = pytest.mark.skipif(not GPU_AVAILABLE, reason="No GPU backend (CuP
 
 @pytest.fixture(params=BACKENDS)
 def backend(request):
-    return request.param
+    """Runs the test on each available backend (set for the whole process, as users do)."""
+    warpfield.set_backend(request.param)
+    yield request.param
+    warpfield.set_backend("auto")
 
 
 def test_trivial():
@@ -54,7 +57,6 @@ def test_warpmap_invert_fast_zero_field(backend):
         block_stride=block_stride,
         ref_shape=ref_shape,
         mov_shape=mov_shape,
-        backend=backend,
     )
 
     inv = wm.invert_fast(sigma=0.5, truncate=4)
@@ -80,7 +82,6 @@ def test_warpmap_push_coordinates_constant_shift(backend):
         block_stride=np.array([1, 1, 1], dtype=np.float32),
         ref_shape=shape,
         mov_shape=shape,
-        backend=backend,
     )
 
     coords = np.array([[1.0, 2.0, 3.5], [1.0, 4.0, 2.0], [2.0, 1.5, 4.0]], dtype=np.float32)
@@ -105,7 +106,6 @@ def test_warpmap_jacobian_det_linear_field(backend):
         block_stride=np.array([1, 1, 1], dtype=np.float32),
         ref_shape=shape,
         mov_shape=shape,
-        backend=backend,
     )
 
     det_j = _to_numpy(wm.jacobian_det(units_per_voxel=[1, 1, 1], edge_order=1))
@@ -173,7 +173,7 @@ def test_register_volumes(shape):
 
         mx.reset_peak_memory()
 
-    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend="auto", verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
 
     assert registered.shape == fixed.shape, "Registered volume shape mismatch."
     inner = (slice(10, -10),) * 3
@@ -249,7 +249,7 @@ def test_register_volumes_small(backend):
     fixed, moving = _small_volumes()
     recipe = warpfield.Recipe()
     recipe.add_level(block_size=[32, 32, 32], repeats=2)
-    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
 
     assert isinstance(registered, np.ndarray) and registered.shape == fixed.shape
     assert isinstance(warp_map, warpfield.WarpMap)
@@ -270,16 +270,16 @@ def test_custom_projector_callable(backend):
         return warpfield.register.Projector()(vol_blocks, axis)
 
     recipe.levels[0].project = project
-    _, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+    _, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
     assert len(calls) > 0
     np.testing.assert_allclose(_to_numpy(warp_map.warp_field)[0].mean(), 3.0, atol=0.1)
 
 
 def test_warpmap_h5_roundtrip(backend, tmp_path):
     rng = np.random.default_rng(0)
-    wm = warpfield.WarpMap(rng.random((3, 4, 5, 6)), [8, 8, 8], [4, 4, 4], (20, 24, 28), (21, 25, 29), backend=backend)
+    wm = warpfield.WarpMap(rng.random((3, 4, 5, 6)), [8, 8, 8], [4, 4, 4], (20, 24, 28), (21, 25, 29))
     wm.to_h5(tmp_path / "wm.h5")
-    wm2 = warpfield.WarpMap.from_h5(tmp_path / "wm.h5", backend=backend)
+    wm2 = warpfield.WarpMap.from_h5(tmp_path / "wm.h5")
     assert isinstance(wm2, warpfield.WarpMap) and wm2.B.name == backend
     np.testing.assert_allclose(_to_numpy(wm2.warp_field), _to_numpy(wm.warp_field))
     assert (wm2.ref_shape, wm2.mov_shape) == (wm.ref_shape, wm.mov_shape)
@@ -291,7 +291,7 @@ def test_push_pull_coordinates_roundtrip(backend):
     block_size = np.array([16, 16, 16])
     grid = np.indices((8, 8, 8)).astype("float32")
     warp_field = np.stack([3.0 + np.sin(grid[1] / 3), -2.0 + np.cos(grid[2] / 4), 2.5 * np.ones_like(grid[0])])
-    warp_map = warpfield.WarpMap(warp_field, block_size, block_size, ref_shape, ref_shape, backend=backend)
+    warp_map = warpfield.WarpMap(warp_field, block_size, block_size, ref_shape, ref_shape)
 
     points = np.random.default_rng(0).uniform(32, 96, size=(3, 200)).astype("float32")
     pulled = warp_map.pull_coordinates(warp_map.push_coordinates(points))
@@ -324,7 +324,7 @@ def test_callbacks(backend):
 
 
 def test_numpy_backend_needs_no_gpu(monkeypatch):
-    """backend="numpy" must never fall back to the default GPU backend (as on CI runners without a GPU)."""
+    """The numpy backend must never fall back to the default GPU backend (as on CI runners without a GPU)."""
     from warpfield.backends import selection
 
     monkeypatch.setitem(selection._USABLE, "cupy", lambda: False)
@@ -332,24 +332,22 @@ def test_numpy_backend_needs_no_gpu(monkeypatch):
     monkeypatch.setattr(selection, "_default", None)
     with pytest.raises(RuntimeError):
         get_array_backend("auto")  # no GPU backend left
+    monkeypatch.setattr(selection, "_default", "numpy")  # as set by warpfield.set_backend("numpy")
     fixed, moving = _small_volumes()
     recipe = warpfield.Recipe()
     recipe.levels = recipe.levels[:1]
-    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend="numpy", verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
     assert isinstance(registered, np.ndarray) and warp_map.B.name == "numpy"
 
 
-def test_set_default_backend_normalises_name(backend):
-    try:
-        warpfield.set_default_backend(backend.upper())
-        assert get_array_backend("auto").name == backend
-    finally:
-        warpfield.set_default_backend("auto")
+def test_set_backend_normalises_name(backend):
+    warpfield.set_backend(backend.upper())
+    assert current_backend().name == backend
 
 
 def test_warpmap_assignment_converts_to_backend(backend):
     B = get_array_backend(backend)
-    wm = warpfield.WarpMap(np.zeros((3, 2, 2, 2)), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2), backend=backend)
+    wm = warpfield.WarpMap(np.zeros((3, 2, 2, 2)), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2))
     wm.warp_field = np.ones((3, 2, 2, 2))  # float64 NumPy array
     assert B.is_array(wm.warp_field) and wm.warp_field.dtype == B.float32
     wm.warp_field *= 2
@@ -360,7 +358,7 @@ def test_fit_affine_single_block_axis(backend):
     """An affine fit with only one block along an axis (rank-deficient system) must still work."""
     shift = np.array([2.0, -1.0, 0.5], dtype="float32")
     warp_field = np.broadcast_to(shift[:, None, None, None], (3, 1, 6, 6)).copy()
-    wm = warpfield.WarpMap(warp_field, [32, 32, 32], [32, 32, 32], (32, 192, 192), (32, 192, 192), backend=backend)
+    wm = warpfield.WarpMap(warp_field, [32, 32, 32], [32, 32, 32], (32, 192, 192), (32, 192, 192))
     fitted, _ = wm.fit_affine()
     np.testing.assert_allclose(_to_numpy(fitted.warp_field), warp_field, atol=1e-3)
 
@@ -370,16 +368,16 @@ def test_copilot_review_cases(backend):
     B = get_array_backend(backend)
     # soften_edges on a 2D image with the default soft_edge
     img = np.random.default_rng(0).random((20, 30)).astype("float32")
-    np.testing.assert_allclose(warpfield.ndimage.soften_edges(img, backend=backend), img)
+    np.testing.assert_allclose(warpfield.ndimage.soften_edges(img), img)
     # WarpMap does not share memory with the arrays it was created from
     field = np.zeros((3, 2, 2, 2), dtype="float32")
-    wm = warpfield.WarpMap(B.asarray(field), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2), backend=backend)
+    wm = warpfield.WarpMap(B.asarray(field), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2))
     src = wm.warp_field
-    wm2 = warpfield.WarpMap(src, [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2), backend=backend)
+    wm2 = warpfield.WarpMap(src, [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2))
     wm2.warp_field += 1
     assert _to_numpy(wm.warp_field).max() == 0
-    # chain works across backends (NumPy map + this backend's map)
-    wm_np = warpfield.WarpMap(np.ones_like(field), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2), backend="numpy")
+    # chain works with a map made from NumPy arrays
+    wm_np = warpfield.WarpMap(np.ones_like(field), [1, 1, 1], [1, 1, 1], (2, 2, 2), (2, 2, 2))
     assert _to_numpy(wm.chain(wm_np).warp_field).min() == 1
     # mosaic_callback with slabs reaching past the last slice
     pytest.importorskip("skimage")
@@ -400,7 +398,7 @@ def test_custom_callables_may_return_numpy(backend):
     recipe.levels[0].project = lambda blocks, axis: _to_numpy(proj(blocks, axis))
     smooth = recipe.levels[0].smooth
     recipe.levels[0].smooth = lambda xcorr, block_size: _to_numpy(smooth(xcorr, block_size))
-    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+    registered, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
     assert isinstance(registered, np.ndarray) and warp_map.B.name == backend
 
 
@@ -411,7 +409,7 @@ def test_zoom_chop_pad_matches_reference(backend):
     x = np.random.default_rng(0).random((10, 12, 14)).astype("float32")
     target_shape, scale = np.array([13, 9, 16]), np.array([1.3, 0.8, 1.1])
     shift, flip = np.array([0.5, -1.0, 2.0]), (False, True, False)
-    out = warpfield.ndimage.zoom_chop_pad(x, target_shape, scale, shift=shift, flip=flip, backend=backend)
+    out = warpfield.ndimage.zoom_chop_pad(x, target_shape, scale, shift=shift, flip=flip)
     coords = np.indices(target_shape).astype("float64")
     for i in range(3):
         coords[i] = (coords[i] - target_shape[i] / 2) / scale[i] + x.shape[i] / 2
@@ -428,7 +426,7 @@ def test_warpmap_pickle_and_deepcopy(backend):
     import pickle
 
     field = np.random.default_rng(0).random((3, 2, 3, 4)).astype("float32")
-    wm = warpfield.WarpMap(field, [4, 4, 4], [2, 2, 2], (4, 6, 8), (4, 6, 8), backend=backend)
+    wm = warpfield.WarpMap(field, [4, 4, 4], [2, 2, 2], (4, 6, 8), (4, 6, 8))
     for wm2 in (pickle.loads(pickle.dumps(wm)), copy.deepcopy(wm)):
         assert wm2.B is wm.B
         np.testing.assert_array_equal(_to_numpy(wm2.warp_field), field)
@@ -441,7 +439,7 @@ def test_warpmap_copies_backend_inputs(backend):
     B = get_array_backend(backend)
     f = B.asarray(np.zeros((3, 2, 2, 2), "float32"))
     bs = B.asarray(np.ones(3, "float32"))
-    wm = warpfield.WarpMap(f, bs, bs, (2, 2, 2), (2, 2, 2), backend=backend)
+    wm = warpfield.WarpMap(f, bs, bs, (2, 2, 2), (2, 2, 2))
     wm.warp_field += 1
     wm.block_size *= 2
     assert _to_numpy(f).sum() == 0 and _to_numpy(bs).sum() == 3
@@ -453,12 +451,12 @@ def test_warpmap_copies_backend_inputs(backend):
     assert _to_numpy(wm.warp_field).sum() == 24
 
 
-def test_soften_edges_copy_keeps_memmap(tmp_path):
+def test_soften_edges_copy_keeps_memmap(backend, tmp_path):
     path = tmp_path / "vol.npy"
     np.save(path, np.ones((8, 9, 10), "float32"))
     mm = np.load(path, mmap_mode="r+")
-    out = warpfield.ndimage.soften_edges(mm, soft_edge=2, copy=True, backend="numpy")
-    assert out[0, 0, 0] == 0
+    out = warpfield.ndimage.soften_edges(mm, soft_edge=2, copy=True)
+    assert _to_numpy(out)[0, 0, 0] == 0
     mm.flush()
     assert np.load(path).min() == 1
 
@@ -476,8 +474,6 @@ def test_backend_of_without_usable_mlx(monkeypatch):
     np.testing.assert_array_equal(get_array_backend("numpy").asarray(a), np.ones((2, 3)))
     with pytest.raises(RuntimeError):
         get_array_backend("mlx")  # asking for it by name still checks
-    with pytest.raises(RuntimeError):
-        warpfield.WarpMap(mx.zeros((3, 2, 2, 2)), [1] * 3, [1] * 3, (2,) * 3, (2,) * 3)  # so does computing on it
 
 
 def test_soften_edges_copy_keeps_input(backend):
@@ -486,21 +482,10 @@ def test_soften_edges_copy_keeps_input(backend):
     if backend != "numpy":
         inputs.append(get_array_backend(backend).asarray(np.ones((6, 7, 8), "float32")))
     for arr in inputs:
-        for b in {backend, "numpy"}:
-            warpfield.ndimage.soften_edges(arr, soft_edge=2, copy=True, backend=b)
+        for b in {backend, "numpy"}:  # also a GPU array on the numpy backend (MLX arrays are viewed, not copied)
+            warpfield.set_backend(b)
+            warpfield.ndimage.soften_edges(arr, soft_edge=2, copy=True)
             assert _to_numpy(arr).min() == 1, (type(arr), b)
-
-
-def test_copies_with_own_backend_object():
-    """Passing a new backend object (not the cached instance) must not skip the copies."""
-    from warpfield.backends.numpy_backend import NumpyBackend
-
-    field = np.zeros((3, 2, 2, 2), "float32")
-    wm = warpfield.WarpMap(field, [1] * 3, [1] * 3, (2,) * 3, (2,) * 3, backend=NumpyBackend())
-    wm.warp_field += 1
-    vol = np.ones((6, 7, 8), "float32")
-    warpfield.ndimage.soften_edges(vol, soft_edge=2, copy=True, backend=NumpyBackend())
-    assert field.sum() == 0 and vol.min() == 1
 
 
 # ------------------------------------------------------------------------- bugs that were on main before #48
@@ -534,9 +519,7 @@ def test_subpixel_shift_estimate(backend, block):
         ref = scipy.ndimage.gaussian_filter(rng.random((64, 64, 64)), 2).astype("float32")
         shift = rng.uniform(-3, 3, 3)
         vol = np.fft.ifftn(scipy.ndimage.fourier_shift(np.fft.fftn(ref), shift)).real.astype("float32")
-        mapper = warpfield.register.WarpMapper(
-            ref, np.array([block] * 3), proj_method=warpfield.register.Projector(), backend=backend
-        )
+        mapper = warpfield.register.WarpMapper(ref, np.array([block] * 3), proj_method=warpfield.register.Projector())
         est = _to_numpy(mapper.get_displacement(mapper.B.asarray(vol)).warp_field).reshape(3, -1).mean(1)
         assert np.abs(est - shift).max() < 0.125, (est, shift)
 
@@ -546,7 +529,7 @@ def test_tukey_ref_value_is_used(backend):
 
     def ref_proj(alpha):
         m = warpfield.register.WarpMapper(
-            ref, np.array([16] * 3), proj_method=warpfield.register.Projector(), tukey_alpha=alpha, backend=backend
+            ref, np.array([16] * 3), proj_method=warpfield.register.Projector(), tukey_alpha=alpha
         )
         return _to_numpy(m.ref_blocks_proj_ft_conj[0])
 
@@ -586,7 +569,7 @@ def test_richardson_lucy_shear_zero_keeps_arguments(backend):
     from warpfield.ndimage import richardson_lucy_gaussian, richardson_lucy_gaussian_shear
 
     img = np.random.default_rng(0).random((12, 13, 14)).astype("float32") + 0.1
-    kw = dict(num_iter=3, epsilon=0.05, beta=0.5, initial_guess=np.full_like(img, 0.5), backend=backend)
+    kw = dict(num_iter=3, epsilon=0.05, beta=0.5, initial_guess=np.full_like(img, 0.5))
     np.testing.assert_allclose(
         richardson_lucy_gaussian_shear(img, [1, 1, 1], 0, **kw), richardson_lucy_gaussian(img, [1, 1, 1], **kw)
     )
@@ -600,7 +583,7 @@ def test_block_stride_warning_checks_all_axes(backend):
         warpfield.register.LevelConfig(block_size=[32, 32, 32], repeats=1),  # coarser stride along axis 1 only
     ]
     with pytest.warns(UserWarning, match="block stride"):
-        warpfield.register_volumes(fixed, moving, recipe, backend=backend, verbose=False)
+        warpfield.register_volumes(fixed, moving, recipe, verbose=False)
 
 
 def test_video_without_pre_filter(backend, tmp_path):
@@ -613,7 +596,7 @@ def test_video_without_pre_filter(backend, tmp_path):
         warnings.simplefilter("error", UserWarning)  # "Video generation failed" is a warning
         cb = lambda v: _to_numpy(v.max(0))  # noqa: E731
         video = str(tmp_path / "v.mp4")
-        warpfield.register_volumes(fixed, moving, recipe, callback=cb, video_path=video, backend=backend, verbose=False)
+        warpfield.register_volumes(fixed, moving, recipe, callback=cb, video_path=video, verbose=False)
     assert (tmp_path / "v.mp4").exists()
 
 
@@ -654,9 +637,7 @@ def test_video_with_backend_callback_output(backend, tmp_path):
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         video = str(tmp_path / "v.mp4")
-        warpfield.register_volumes(
-            fixed, moving, recipe, callback=lambda v: v.max(0), video_path=video, backend=backend, verbose=False
-        )
+        warpfield.register_volumes(fixed, moving, recipe, callback=lambda v: v.max(0), video_path=video, verbose=False)
     assert (tmp_path / "v.mp4").exists()
 
 
@@ -696,7 +677,7 @@ def test_callback_views_are_kept(backend):
     )
     for callback in callbacks:  # backend and NumPy views, also in containers
         _, _, frames = warpfield.register_volumes(
-            fixed, moving, recipe, callback=callback, backend=backend, verbose=False
+            fixed, moving, recipe, callback=callback, verbose=False
         )
         frames = [[_to_numpy(x) for x in (f if isinstance(f, (list, tuple)) else [f])] for f in frames]
         assert len(frames) == 3
@@ -707,4 +688,4 @@ def test_callback_views_are_kept(backend):
 def test_video_path_needs_callback(backend):
     fixed, moving = _small_volumes()
     with pytest.raises(ValueError, match="callback"):
-        warpfield.register_volumes(fixed, moving, warpfield.Recipe(), video_path="v.mp4", backend=backend)
+        warpfield.register_volumes(fixed, moving, warpfield.Recipe(), video_path="v.mp4")

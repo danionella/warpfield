@@ -114,11 +114,9 @@ points_pulled = warp_map.invert().push_coordinates(points) # inverse transformat
 
 ### Backends
 
-warpfield uses the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To choose one, pass `backend="cupy"`, `"mlx"` or `"numpy"` to `register_volumes` (or `WarpMap`), or set a default with `warpfield.set_default_backend("mlx")`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
+warpfield runs on the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To use a different one, call `warpfield.set_backend("mlx")` (or `"cupy"`, `"numpy"`) before you start. On the command line, use `--backend`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
 
-Results are returned on the backend of the input: NumPy input gives NumPy output.
-
-The pieces of a recipe (`RegFilter`, `Projector`, `Smoother`) are different: they run on the backend of the array they get. Inside a registration that is the GPU, but calling `recipe.pre_filter(vol)` yourself on a NumPy array runs on the CPU, which is slow for large volumes. Pass `backend="auto"` (or a GPU array) to run it on the GPU.
+Functions return the same array type you pass in: NumPy in, NumPy out.
 
 > [!TIP]
 > You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
