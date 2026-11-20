@@ -150,7 +150,7 @@ python -m warpfield --help
 #### Required Arguments
 
 - `--fixed`: Path to the fixed 3D volume: `.h5`/`.hdf5`, `.zarr`, `.mat`, `.nii`/`.nii.gz`, `.nrrd`/`.nhdr`, `.tif`/`.tiff` or `.npy`. For HDF5, MATLAB and Zarr files, add the dataset, variable or array after the file name, separated by `:` or `/` (e.g. `data.h5:fixed`, `data.mat/fixed`, `store.zarr/fixed`). A Zarr store that is itself an array needs no name.
-- `--moving`: Path to the moving 3D volume, in any of the same formats. It must have the same shape as the fixed volume.
+- `--moving`: Path to the moving 3D volume, in any of the same formats. Its shape may differ from the fixed volume's, but its voxel size must be the same.
 - `--recipe`: Path to a recipe YAML file, or the name of a bundled recipe (`default.yml`, `default_opm.yml`).
 
 #### Optional Arguments

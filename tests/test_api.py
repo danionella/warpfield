@@ -282,6 +282,32 @@ def test_load_data_container_paths(tmp_path):
     assert data.shape == (2, 3, 4) and info["path"] == str(tmp_path / "a.zarr") and info["key"] is None
 
 
+def test_cli_with_different_shapes(tmp_path):
+    """Fixed and moving volumes of different shapes register; --invert gives the fixed volume in moving space."""
+    import scipy.ndimage
+
+    rng = np.random.default_rng(0)
+    big = scipy.ndimage.gaussian_filter(rng.random((64, 72, 80)).astype("float32"), 2)
+    fixed, moving = big[4:60, 4:68, 4:76], np.roll(big, 2, axis=0)  # fixed (56, 64, 72), moving (64, 72, 80)
+    np.save(tmp_path / "fixed.npy", fixed)
+    np.save(tmp_path / "moving.npy", moving)
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.to_yaml(tmp_path / "recipe.yml")
+    cmd = [sys.executable, "-m", "warpfield", "--recipe", str(tmp_path / "recipe.yml"), "--backend", "numpy"]
+    cmd += ["--fixed", str(tmp_path / "fixed.npy"), "--moving", str(tmp_path / "moving.npy"), "--invert"]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    with h5py.File(tmp_path / "moving_registered.h5", "r") as f:
+        assert f["moving_reg"].shape == fixed.shape
+        inner = (slice(6, -6),) * 3
+        err = np.mean((f["moving_reg"][:][inner] - fixed[inner]) ** 2)
+        err_centre_crop = np.mean((moving[4:60, 4:68, 4:76][inner] - fixed[inner]) ** 2)
+        assert err < 0.05 * err_centre_crop
+        assert f["fixed_reg_inv"].shape == moving.shape
+        assert tuple(f["warp_map/ref_shape"][:]) == fixed.shape and tuple(f["warp_map/mov_shape"][:]) == moving.shape
+
+
 # ------------------------------------------------------------------------------------------------------ docs
 def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""

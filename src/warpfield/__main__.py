@@ -65,10 +65,7 @@ def main():
     output_path = _check_output_path(args.output, fixed_info["path"], moving_info["path"])
     if fixed_image.ndim != 3 or moving_image.ndim != 3:
         raise ValueError("Both fixed and moving images must be 3D volumes.")
-    if fixed_image.shape != moving_image.shape:
-        raise ValueError("Fixed and moving images must have the same shape.")
-    # report shape
-    logging.info(f"Volume shapes: {fixed_image.shape}")
+    logging.info(f"Volume shapes: fixed {fixed_image.shape}, moving {moving_image.shape}")
     recipe = Recipe.from_yaml(args.recipe)
 
     # register
