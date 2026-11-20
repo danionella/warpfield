@@ -179,6 +179,26 @@ def test_cli_with_h5_dataset_paths(tmp_path, sep):
         assert set(f) == {"fixed", "moving"}
 
 
+def test_cli_with_zarr_array_path(tmp_path):
+    """`store.zarr/array` inputs, without --output, write next to the store (not into it)."""
+    zarr = pytest.importorskip("zarr")
+    fixed, moving = _small_volumes(size=48)
+    group = zarr.open_group(str(tmp_path / "data.zarr"), mode="w")
+    group.create_array("fixed", data=fixed)
+    group.create_array("moving", data=moving)
+    assert warpfield.load_data(str(tmp_path / "data.zarr" / "moving"))[1]["path"] == str(tmp_path / "data.zarr")
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    recipe.to_yaml(tmp_path / "recipe.yml")
+    cmd = [sys.executable, "-m", "warpfield", "--recipe", str(tmp_path / "recipe.yml"), "--backend", "numpy"]
+    cmd += ["--fixed", str(tmp_path / "data.zarr" / "fixed"), "--moving", str(tmp_path / "data.zarr" / "moving")]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    with h5py.File(tmp_path / "data_registered.h5", "r") as f:
+        assert "moving_reg" in f
+    assert not (tmp_path / "data.zarr" / "moving_registered.h5").exists()
+
+
 # ------------------------------------------------------------------------------------------------------ docs
 def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""

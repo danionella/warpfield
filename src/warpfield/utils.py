@@ -1,4 +1,5 @@
 import io
+import re
 import h5py
 import warnings
 import hdf5plugin
@@ -119,7 +120,10 @@ def load_data(file_path: str):
         arr = zarr.open(file_path, mode="r")
         data = np.array(arr)
         meta = dict(getattr(arr, "attrs", {}))
-        return data, dict(filetype="zarr", path=file_path, meta=meta)
+        # The store (x.zarr) is what sits on disk; an array inside it is given as x.zarr/array. Report the store as
+        # the path, so that the CLI's default output goes next to the store, not inside it.
+        store = re.match(r"(.*?\.zarr)(?=[/\\]|$)", file_path)
+        return data, dict(filetype="zarr", path=store.group(1) if store else file_path, meta=meta)
 
     else:
         raise ValueError(f"Unsupported file type: {file_path}")
