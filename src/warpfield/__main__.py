@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import hdf5plugin
 
+from .backends import current_backend
 from .utils import load_data, set_backend
 from .register import register_volumes, Recipe
 
@@ -56,7 +57,11 @@ def main():
         "--backend", default="auto", help="Backend to compute on: `cupy`, `mlx` or `numpy` (CPU, slow). Default: auto (first available GPU backend)."
     )
     args = parser.parse_args()
-    set_backend(args.backend)
+    try:  # check the backend before loading the (possibly large) volumes
+        set_backend(args.backend)
+        logging.info(f"Backend: {current_backend().name}")
+    except (RuntimeError, ValueError) as e:
+        parser.error(str(e).replace("Call warpfield.set_backend('numpy')", "Use --backend numpy"))
 
     # load
     logging.info(f"Loading fixed image from {args.fixed}...")

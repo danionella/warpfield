@@ -21,7 +21,8 @@ def _split_container_path(file_path, extensions, is_dir=False):
     ``extensions`` matches.
 
     If several parts of the path end in a matching extension (e.g. a folder ``exp.h5/`` holding ``x.h5``), the first
-    one that exists on disk as a file (as a folder if ``is_dir``, for Zarr stores) is taken.
+    one that exists on disk as a file (as a folder if ``is_dir``, for Zarr stores) is taken. If none does but the
+    whole path is a file (e.g. ``exp.h5/x.tif``), it is not this format: None.
     """
     # separators: ":" and "/", and "\\" for Windows paths such as str(Path("data.zarr") / "array")
     pattern = r"\.(?:%s)(?=[:/\\]|$)" % "|".join(re.escape(e.lstrip(".")) for e in extensions)
@@ -32,7 +33,19 @@ def _split_container_path(file_path, extensions, is_dir=False):
     if not candidates:
         return None
     exists = os.path.isdir if is_dir else os.path.isfile
-    return next((c for c in candidates if exists(c[0])), candidates[0])
+    found = next((c for c in candidates if exists(c[0])), None)
+    if found is None and os.path.isfile(file_path):
+        return None
+    return found or candidates[0]
+
+
+def _not_a_group(obj, what):
+    """Raise if ``obj`` (an h5py or zarr object) is a group rather than an array, naming what it contains."""
+    is_group = isinstance(obj, h5py.Group) or type(obj).__name__ == "Group"  # zarr.Group, without importing zarr
+    if is_group:
+        names = ", ".join(sorted(obj.keys())) or "nothing"
+        raise ValueError(f"{what} is a group, not an array. Give one of its members after it: {names}")
+    return obj
 
 
 def load_data(file_path: str):
@@ -66,8 +79,9 @@ def load_data(file_path: str):
         if key is None:
             raise ValueError(f"Add the dataset to the HDF5 path, e.g. {file_path}:dataset or {file_path}/dataset")
         with h5py.File(file_path, "r") as f:
-            data = np.array(f[key])
-            attrs = dict(f[key].attrs)  # Extract attributes as metadata
+            dset = _not_a_group(f[key], f"{key} in {file_path}")
+            data = np.array(dset)
+            attrs = dict(dset.attrs)  # Extract attributes as metadata
         return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
 
     elif file_path.endswith(".nii") or file_path.endswith(".nii.gz"):
@@ -124,7 +138,7 @@ def load_data(file_path: str):
             with h5py.File(file_path, "r") as f:
                 if variable_name not in f:
                     raise not_found
-                data = np.array(f[variable_name]).T
+                data = np.array(_not_a_group(f[variable_name], f"{variable_name} in {file_path}")).T
         else:
             mat_data = loadmat(file_path, variable_names=[variable_name])
             if variable_name not in mat_data:
@@ -148,7 +162,7 @@ def load_data(file_path: str):
         # The store (x.zarr) is what sits on disk, so report it as the path: the CLI's default output then goes next
         # to the store, not inside it.
         file_path, key = zarr_path
-        arr = zarr.open(file_path, mode="r", path=key or "")
+        arr = _not_a_group(zarr.open(file_path, mode="r", path=key or ""), f"{key or 'The store'} in {file_path}")
         data = np.array(arr)
         meta = dict(getattr(arr, "attrs", {}))
         return data, dict(filetype="zarr", path=file_path, key=key, meta=meta)

@@ -79,8 +79,12 @@ def available_array_backends():
 
 def set_array_backend(name):
     """Set the backend warpfield runs on: "cupy", "mlx" or "numpy" (CPU, slow). "auto" or None restores the
-    automatic choice (the first available GPU backend). Arrays and WarpMaps created before keep their backend,
-    so set it before you start."""
+    automatic choice (the first available GPU backend).
+
+    Everything computes on this backend from then on. Existing WarpMaps follow the switch (their arrays move to the
+    new backend when next used); your own arrays keep their type, and results are returned in it. A
+    RegistrationPyramid is tied to the backend it was created on, so create a new one after switching.
+    """
     global _default
     if name in (None, "auto", "default"):
         _default = None

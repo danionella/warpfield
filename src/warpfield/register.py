@@ -7,7 +7,7 @@ from typing import Any, Callable, List, Union
 import h5py
 import numpy as np
 import scipy.signal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from tqdm.auto import tqdm
 
 from .backends import backend_of, current_backend, like_input
@@ -481,7 +481,7 @@ class RegistrationPyramid:
     """
 
     def __init__(self, ref_vol, recipe, reg_mask=1):
-        recipe.model_validate(recipe.model_dump())
+        _check_recipe(recipe)
         self.B = B = current_backend()
         self.recipe = recipe
         self.reg_mask = B.asarray(reg_mask, B.float32)
@@ -526,6 +526,11 @@ class RegistrationPyramid:
             - warp_map (WarpMap): Displacement field
             - callback_output (list): List of outputs from the callback function
         """
+        if self.B is not current_backend():
+            raise RuntimeError(
+                f"This RegistrationPyramid was created on the {self.B.name} backend, but warpfield now runs on "
+                f"{current_backend().name} (warpfield.set_backend). Create a new RegistrationPyramid."
+            )
         B = self.B
         vol_in = vol
         vol = B.asarray(vol, B.float32)
@@ -602,7 +607,7 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    recipe.model_validate(recipe.model_dump())
+    _check_recipe(recipe)
     if video_path is not None and callback is None:
         raise ValueError("video_path needs a callback that returns 2D frames, e.g. warpfield.utils.mips_callback()")
     reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
@@ -626,6 +631,29 @@ def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, 
         except (ValueError, AssertionError) as e:  # create_rgb_video raises ValueError if ffmpeg fails
             warnings.warn(f"Video generation failed with error: {e}")
     return registered_vol, warp_map, cbout
+
+
+def _check_recipe(model, where="recipe"):
+    """Check a recipe (or any recipe part) for values that became invalid after it was created, e.g.
+    ``recipe.levels[0].repeats = "x"`` or an in-place change to a list setting.
+
+    Each model, also nested ones, is checked against the warpfield class it is or derives from, with that class's
+    settings only: a subclass of a recipe piece (e.g. a ``Projector`` with its own settings, ``__init__`` or
+    validators) is the subclass's business, as on 0.2. Unknown keys in YAML files and dicts are rejected when they
+    are parsed (``extra="forbid"``).
+    """
+    if isinstance(model, BaseModel):
+        base = next((c for c in type(model).__mro__ if c in _RECIPE_CLASSES), None)
+        if base is not None:
+            try:  # nested models are passed as they are (pydantic accepts instances) and checked below
+                base.model_validate({name: getattr(model, name) for name in base.model_fields})
+            except ValidationError as e:
+                raise ValueError(f"Invalid setting in {where}:\n{e}") from None
+        for name in type(model).model_fields:
+            _check_recipe(getattr(model, name), f"{where}.{name}")
+    elif isinstance(model, (list, tuple)):
+        for i, item in enumerate(model):
+            _check_recipe(item, f"{where}[{i}]")
 
 
 class Projector(BaseModel):
@@ -770,7 +798,8 @@ class LevelConfig(BaseModel):
         block_size (list): shape of blocks, whose rigid displacement is estimated
         block_stride (list): stride (usually identical to block_size)
         repeats (int): number of iterations for this level (deisable level by setting repeats to 0)
-        smooth (Smoother or None): Smoother object
+        smooth (Smoother, callable or None): Smoother object. A callable is called as ``f(xcorr_proj, block_size)``
+            and returns the smoothed cross-correlation.
         project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
         tukey_ref (float): if not None, apply a Tukey window to the reference volume (alpha = tukey_ref). Default is 0.5
         affine (bool): if True, apply affine transformation to the displacement field
@@ -784,7 +813,7 @@ class LevelConfig(BaseModel):
     block_stride: Union[List[int], float] = 1.0
     project: Union[Projector, Callable[[_ArrayType, int], _ArrayType]] = Projector()
     tukey_ref: Union[float, None] = 0.5
-    smooth: Union[Smoother, None] = Smoother()
+    smooth: Union[Smoother, Callable[[_ArrayType, Any], _ArrayType], None] = Smoother()
     affine: bool = False
     median_filter: bool = True
     update_rate: float = 1.0
@@ -873,3 +902,6 @@ class Recipe(BaseModel):
         with open(yaml_path, "w") as f:
             yaml.dump(self.model_dump(), f)
         print(f"Recipe saved to {yaml_path}")
+
+
+_RECIPE_CLASSES = (Projector, Smoother, RegFilter, LevelConfig, Recipe)  # checked by _check_recipe

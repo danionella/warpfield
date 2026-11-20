@@ -56,6 +56,55 @@ def test_recipe_rejects_unknown_keys(data):
         warpfield.Recipe.model_validate(data)
 
 
+def test_recipe_with_subclassed_pieces(backend):
+    """Subclasses of the recipe pieces may add their own settings, __init__ and validators (as on 0.2):
+    extra="forbid" is for parsing, and the check before a registration only looks at warpfield's settings."""
+    from pydantic import field_validator
+
+    class MyProjector(warpfield.register.Projector):
+        gamma: float = 1.0
+
+    class InitProjector(warpfield.register.Projector):
+        gamma: float = 1.0
+
+        def __init__(self, g, **kwargs):
+            super().__init__(gamma=g, **kwargs)
+
+    class MyFilter(warpfield.register.RegFilter):
+        kernel: str = "3"
+
+        @field_validator("kernel")
+        @classmethod
+        def to_array(cls, v):
+            return np.ones(int(v))  # changes the type: re-validating as MyFilter would fail
+
+    fixed, moving = _small_volumes()
+    for projector in [MyProjector(gamma=2.0), InitProjector(2.0)]:
+        recipe = warpfield.Recipe(pre_filter=MyFilter(kernel="5"))
+        recipe.levels = recipe.levels[:1]
+        recipe.levels[0].project = projector
+        _, warp_map, _ = warpfield.register_volumes(fixed, moving, recipe, verbose=False)
+        np.testing.assert_allclose(_to_numpy(warp_map.warp_field)[0].mean(), 3.0, atol=0.1)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda r: setattr(r.levels[0], "repeats", "many"),
+        lambda r: r.levels[0].smooth.sigmas.__setitem__(0, "wide"),  # in-place change to a nested list
+        lambda r: setattr(r.levels[0].project, "low", "x"),
+    ],
+)
+def test_recipe_invalid_changes_are_caught(change):
+    """Invalid values set after the recipe was created are caught before the registration starts, and the error
+    says where."""
+    fixed, moving = _small_volumes(size=32)
+    recipe = warpfield.Recipe()
+    change(recipe)
+    with pytest.raises(ValueError, match=r"Invalid setting in recipe\.levels\[0\]"):
+        warpfield.register_volumes(fixed, moving, recipe, verbose=False)
+
+
 def test_recipe_yaml_roundtrip(tmp_path):
     recipe = warpfield.Recipe.from_yaml("default.yml")
     recipe.to_yaml(tmp_path / "r.yml")
@@ -126,6 +175,22 @@ def test_warpmap_follows_backend_switch():
         np.testing.assert_allclose(wm.warp(moving), registered, atol=1e-4)
         for derived in [wm.invert_fast(), wm.chain(wm), wm.median_filter()]:
             assert derived.B.name == "numpy" and isinstance(derived.warp_field, np.ndarray)
+    finally:
+        warpfield.set_backend("auto")
+
+
+@pytest.mark.skipif(len(BACKENDS) < 2, reason="needs a GPU backend besides NumPy")
+def test_registration_pyramid_after_backend_switch():
+    """A RegistrationPyramid holds the reference on its backend: after a switch, using it gives a clear error."""
+    fixed, moving = _small_volumes(size=32)
+    recipe = warpfield.Recipe()
+    recipe.levels = recipe.levels[:1]
+    try:
+        warpfield.set_backend(BACKENDS[0])
+        pyramid = warpfield.register.RegistrationPyramid(fixed, recipe)
+        warpfield.set_backend("numpy")
+        with pytest.raises(RuntimeError, match="Create a new RegistrationPyramid"):
+            pyramid.register_single(moving)
     finally:
         warpfield.set_backend("auto")
 
@@ -365,6 +430,50 @@ def test_cli_with_different_shapes(tmp_path):
         assert err < 0.05 * err_centre_crop
         assert f["fixed_reg_inv"].shape == moving.shape
         assert tuple(f["warp_map/ref_shape"][:]) == fixed.shape and tuple(f["warp_map/mov_shape"][:]) == moving.shape
+
+
+def test_load_data_group_instead_of_array(tmp_path):
+    """A group (HDF5 group, MATLAB v7.3 struct, Zarr group store) given instead of an array says what it holds,
+    instead of loading the member names as data."""
+    with h5py.File(tmp_path / "d.h5", "w") as f:
+        f["grp/vol"] = np.ones((2, 3, 4))
+    with pytest.raises(ValueError, match="is a group.*vol"):
+        warpfield.load_data(f"{tmp_path / 'd.h5'}:grp")
+    _write_mat_v73(tmp_path / "s.mat")
+    with h5py.File(tmp_path / "s.mat", "a") as f:
+        f["s/field"] = np.ones((2, 3, 4))
+    with pytest.raises(ValueError, match="is a group.*field"):
+        warpfield.load_data(f"{tmp_path / 's.mat'}:s")
+    zarr = pytest.importorskip("zarr")
+    zarr.open_group(str(tmp_path / "g.zarr"), mode="w").create_array("vol", data=np.ones((2, 3, 4), "float32"))
+    with pytest.raises(ValueError, match="is a group.*vol"):
+        warpfield.load_data(str(tmp_path / "g.zarr"))
+
+
+def test_load_data_other_format_in_folder_named_like_hdf5(tmp_path):
+    """A folder whose name ends in .h5 (or .mat, .zarr-like names) does not hide files of other formats inside it."""
+    import tifffile
+
+    vol = np.arange(24, dtype="float32").reshape(2, 3, 4)
+    (tmp_path / "dir.h5").mkdir()
+    tifffile.imwrite(tmp_path / "dir.h5" / "v.tif", vol)
+    np.testing.assert_array_equal(warpfield.load_data(str(tmp_path / "dir.h5" / "v.tif"))[0], vol)
+    (tmp_path / "dir.mat").mkdir()
+    np.save(tmp_path / "dir.mat" / "v.npy", vol)
+    tifffile.imwrite(tmp_path / "dir.mat" / "v.tif", vol)
+    np.testing.assert_array_equal(warpfield.load_data(str(tmp_path / "dir.mat" / "v.tif"))[0], vol)
+
+
+@pytest.mark.skipif("mlx" in BACKENDS, reason="MLX is a GPU backend that CUDA_VISIBLE_DEVICES does not hide")
+def test_cli_without_gpu_fails_before_loading(tmp_path):
+    """Without a GPU, the CLI stops before loading the volumes, and its hint is the CLI option."""
+    env = {**os.environ, "CUDA_VISIBLE_DEVICES": ""}
+    missing = str(tmp_path / "not_there.npy")  # loading it would fail differently
+    cmd = [sys.executable, "-m", "warpfield", "--fixed", missing, "--moving", missing, "--recipe", "default.yml"]
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    assert result.returncode != 0
+    assert "No GPU backend found" in result.stderr and "--backend numpy" in result.stderr, result.stderr
+    assert "not_there" not in result.stderr and "Loading" not in result.stderr
 
 
 # ------------------------------------------------------------------------------------------------------ docs
