@@ -28,9 +28,18 @@ def _check_output_path(output, fixed_file, moving_file):
 
 def main():
     parser = argparse.ArgumentParser(description="GPU-accelerated volumetric image registration tool.")
-    parser.add_argument("--fixed", required=True, help="Path to the fixed image/volume file.")
-    parser.add_argument("--moving", required=True, help="Path to the moving image/volume file.")
-    parser.add_argument("--recipe", required=True, help="Path to the recipe YAML file for registration.")
+    parser.add_argument(
+        "--fixed",
+        required=True,
+        help="Path to the fixed volume. For HDF5, MATLAB and Zarr files, add the dataset after the file name: "
+        "data.h5:name or data.h5/name.",
+    )
+    parser.add_argument("--moving", required=True, help="Path to the moving volume (same formats as --fixed).")
+    parser.add_argument(
+        "--recipe",
+        required=True,
+        help="Path to a recipe YAML file, or a bundled recipe (default.yml, default_opm.yml).",
+    )
     parser.add_argument("--output", help="Path to save the registered image/volume.")
     parser.add_argument(
         "--compression",

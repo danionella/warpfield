@@ -237,6 +237,51 @@ def test_load_matlab_v73_variable(tmp_path):
         warpfield.load_data(f"{tmp_path / 'v73.mat'}:missing")
 
 
+@pytest.mark.parametrize("fmt", ["h5", "mat", "mat73", "zarr"])
+@pytest.mark.parametrize("sep", [":", "/"])
+def test_load_data_name_after_file(tmp_path, fmt, sep):
+    """HDF5, MATLAB and Zarr all take the dataset/variable/array after the file name, with `:` or `/`."""
+    import scipy.io
+
+    vol = np.arange(60, dtype="float32").reshape(3, 4, 5)
+    if fmt == "h5":
+        path, name = tmp_path / "d.h5", "grp/vol"
+        with h5py.File(path, "w") as f:
+            f[name] = vol
+    elif fmt == "mat":
+        path, name = tmp_path / "d.mat", "vol"
+        scipy.io.savemat(path, {name: vol})
+    elif fmt == "mat73":
+        path, name = tmp_path / "d.mat", "vol"
+        _write_mat_v73(path, vol=vol)
+    else:
+        zarr = pytest.importorskip("zarr")
+        path, name = tmp_path / "d.zarr", "grp/vol"
+        zarr.open_group(str(path), mode="w").create_array(name, data=vol)
+    data, info = warpfield.load_data(f"{path}{sep}{name}")
+    np.testing.assert_array_equal(data, vol)
+    assert info["path"] == str(path) and info["key"] == name
+
+
+def test_load_data_container_paths(tmp_path):
+    """No name where one is needed gives a clear error; a Zarr array store needs no name; folders whose names end
+    in .h5 do not confuse the split."""
+    with h5py.File(tmp_path / "d.h5", "w") as f:
+        f["vol"] = np.ones((2, 3, 4))
+    for path in [tmp_path / "d.h5", f"{tmp_path / 'd.h5'}/"]:
+        with pytest.raises(ValueError, match="Add the dataset"):
+            warpfield.load_data(path)
+    (tmp_path / "exp.h5").mkdir()
+    with h5py.File(tmp_path / "exp.h5" / "x.h5", "w") as f:
+        f["vol"] = np.zeros((2, 3, 4))
+    data, info = warpfield.load_data(f"{tmp_path / 'exp.h5' / 'x.h5'}:vol")
+    assert info["path"] == str(tmp_path / "exp.h5" / "x.h5") and data.shape == (2, 3, 4)
+    zarr = pytest.importorskip("zarr")
+    zarr.create_array(str(tmp_path / "a.zarr"), data=np.ones((2, 3, 4), "float32"))
+    data, info = warpfield.load_data(str(tmp_path / "a.zarr"))
+    assert data.shape == (2, 3, 4) and info["path"] == str(tmp_path / "a.zarr") and info["key"] is None
+
+
 # ------------------------------------------------------------------------------------------------------ docs
 def test_submodules_are_documented():
     """pdoc only builds pages for names in __all__; the README links to the submodule pages."""
