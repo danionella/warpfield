@@ -116,7 +116,7 @@ points_pulled = warp_map.invert().push_coordinates(points) # inverse transformat
 
 warpfield runs on the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To use a different one, call `warpfield.set_backend("mlx")` (or `"cupy"`, `"numpy"`) before you start. On the command line, use `--backend`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
 
-Functions return the same array type you pass in: NumPy in, NumPy out.
+Functions return the same array type you pass in: NumPy in, NumPy out. When calling several warpfield functions in a row, pass GPU arrays (e.g. `cupy.asarray(vol)`) to avoid copying between CPU and GPU at every call.
 
 > [!TIP]
 > You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
