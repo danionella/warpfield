@@ -1,16 +1,16 @@
 """Image processing helpers, written once for all backends.
 
-Functions that take an optional ``backend`` argument compute on: the given backend; else the backend of a
-CuPy/MLX input array; else the default GPU backend. NumPy input gives NumPy output.
+The public functions compute on the backend warpfield runs on (see ``warpfield.set_backend``) and return
+results of the input's type: NumPy input gives NumPy output.
 """
 
 import numpy as np
 import scipy.ndimage
 
-from .backends import backend_of, like_input, resolve_backend
+from .backends import backend_of, current_backend, like_input
 
 
-def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect", backend=None):
+def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect"):
     """Difference of Gaussians filter
 
     Args:
@@ -18,7 +18,6 @@ def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect", backend=None):
         sigma_low (scalar or sequence of scalar): standard deviations
         sigma_high (scalar or sequence of scalar): standard deviations
         mode (str): The array borders are handled according to the given mode ("reflect" or "constant")
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         (array_like): filtered data
@@ -27,26 +26,25 @@ def dogfilter(vol, sigma_low=1, sigma_high=4, mode="reflect", backend=None):
         scipy.ndimage.gaussian_filter
         skimage.filters.difference_of_gaussians
     """
-    B = resolve_backend(vol, backend)
+    B = current_backend()
     x = B.asarray(vol, B.float32)
     out = B.gaussian_filter(x, sigma_low, mode=mode)
     out -= B.gaussian_filter(x, sigma_high, mode=mode)
     return like_input(out, vol)
 
 
-def periodic_smooth_decomposition_nd_rfft(img, backend=None):
+def periodic_smooth_decomposition_nd_rfft(img):
     """
     Decompose ND arrays of 2D images into periodic plus smooth components. This can help with edge artifacts in
     Fourier transforms.
 
     Args:
         img (array_like): input image or volume. The last two axes are treated as the image dimensions.
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: periodic component
     """
-    B = resolve_backend(img, backend)
+    B = current_backend()
     xp = B.xp
     x = B.asarray(img, B.float32)
 
@@ -297,7 +295,7 @@ def _may_share_memory(B, x, arr):
     return source == B.name or (B.name == "numpy" and source == "mlx")
 
 
-def soften_edges(arr, soft_edge=0, copy=True, backend=None):
+def soften_edges(arr, soft_edge=0, copy=True):
     """Apply a soft Tukey edge to the input array.
 
     Args:
@@ -305,12 +303,11 @@ def soften_edges(arr, soft_edge=0, copy=True, backend=None):
         soft_edge (int or tuple of int): The size of the soft edge (Tukey envelope) to be applied to the input array, in voxels,
             per axis or for all axes. Default: 0.
         copy (bool): If True, a copy of the array is made. Default: True.
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: The transformed array, with the dtype of the input.
     """
-    B = resolve_backend(arr, backend)
+    B = current_backend()
     x = B.asarray(arr, B.float32)
     if copy and _may_share_memory(B, x, arr):
         x = B.copy(x)
@@ -336,7 +333,6 @@ def zoom_chop_pad(
     flip=(False, False, False),
     cval=0,
     order=1,
-    backend=None,
 ):
     """Zooms, softens, flips, shifts, and pads/crops a 3D array to match the target shape.
 
@@ -351,17 +347,16 @@ def zoom_chop_pad(
         flip (tuple of bool): Whether to flip each axis. Default: (False, False, False).
         cval (int, float): The value to use for padding. Default: 0.
         order (int): Interpolation order. Default: 1 (linear).
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: The transformed array. Dtype is float32.
     """
-    B = resolve_backend(arr, backend)
+    B = current_backend()
     if target_shape is None:
         target_shape = arr.shape
     x = B.asarray(arr, B.float32)
     if any(s > 0 for s in soft_edge):
-        x = soften_edges(x, soft_edge=np.array(soft_edge) / np.array(scale), copy=True, backend=B)
+        x = soften_edges(x, soft_edge=np.array(soft_edge) / np.array(scale), copy=True)
 
     # The source coordinate along axis i only depends on the index along axis i, so compute it as a float32
     # vector (same operations as main) and only expand it to the full grid in the final stack. Python floats
@@ -384,7 +379,7 @@ def zoom_chop_pad(
     return like_input(result, arr)
 
 
-def zoom(arr, zoom_factors, order=1, mode="constant", backend=None):
+def zoom(arr, zoom_factors, order=1, mode="constant"):
     """Zooms an array by given factors along each axis.
 
     Args:
@@ -393,19 +388,16 @@ def zoom(arr, zoom_factors, order=1, mode="constant", backend=None):
             while values less than 1 result in a smaller array. Divide the physical voxel size of the input array by these values to get the physical voxel size of the output array.
         order (int): The order of the spline interpolation. Default is 1 (linear).
         mode (str): Unused; kept for compatibility.
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: The zoomed array.
     """
-    B = resolve_backend(arr, backend)
+    B = current_backend()
     out = B.zoom(B.asarray(arr, B.float32), zoom_factors, order=order)
     return like_input(out, arr)
 
 
-def match_volumes(
-    fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0, 0), cval=0, res_method="fixed", backend=None
-):
+def match_volumes(fixed, fixed_res, moving, moving_res, order=1, soft_edge=(0, 0, 0), cval=0, res_method="fixed"):
     """
     Rescale and pad the fixed and moving volumes so both have the same physical size and resolution.
 
@@ -422,7 +414,6 @@ def match_volumes(
             "min": use the finest (smallest) resolution,
             "max": use the coarsest (largest) resolution,
             "mean": use the mean of fixed_res and moving_res.
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         fixed_out (ndarray): The fixed volume, rescaled and padded to the target resolution and physical size.
@@ -448,14 +439,14 @@ def match_volumes(
         raise ValueError(f"Unknown target_res_type: {res_method}")
 
     target_shape = np.ceil(target_phys / target_res).astype(int)
-    kwargs = dict(target_shape=target_shape, soft_edge=soft_edge, cval=cval, order=order, backend=backend)
+    kwargs = dict(target_shape=target_shape, soft_edge=soft_edge, cval=cval, order=order)
     fixed_out = zoom_chop_pad(fixed, scale=fixed_res / target_res, **kwargs)
     moving_out = zoom_chop_pad(moving, scale=moving_res / target_res, **kwargs)
     return fixed_out, moving_out, tuple(target_res)
 
 
 def richardson_lucy_generic(
-    img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None, backend=None
+    img, convolve_psf, correlate_psf=None, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None
 ):
     """Richardson-Lucy deconvolution using arbitrary convolution operations, with optional Biggs acceleration.
 
@@ -466,12 +457,11 @@ def richardson_lucy_generic(
         num_iter (int): number of iterations. Default is 5.
         epsilon (float): small constant to prevent divide-by-zero. Default is 1e-3.
         beta (float): acceleration parameter. Default is 0.0 (no acceleration). Typically, beta is in the range [0, 0.5].
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: deconvolved image (NumPy if ``img`` was a NumPy array)
     """
-    B = resolve_backend(img, backend)
+    B = current_backend()
     xp = B.xp
     img_in = img
     img = xp.maximum(B.asarray(img, B.float32), 0)
@@ -501,7 +491,7 @@ def richardson_lucy_generic(
     return like_input(img_decon, img_in)
 
 
-def richardson_lucy_fft(img, psf, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None, backend=None):
+def richardson_lucy_fft(img, psf, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None):
     """Richardson-Lucy deconvolution using FFT-based convolution and optional Biggs acceleration.
 
     Args:
@@ -510,12 +500,11 @@ def richardson_lucy_fft(img, psf, num_iter=5, epsilon=1e-3, beta=0.0, initial_gu
         num_iter (int): number of iterations
         epsilon (float): small constant to avoid divide-by-zero
         beta (float): Biggs acceleration parameter (0 = no acceleration)
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: deconvolved image (NumPy if ``img`` was a NumPy array)
     """
-    B = resolve_backend(img, backend)
+    B = current_backend()
     xp = B.xp
     psf = np.clip(B.to_numpy(psf).astype("float32"), 0, None)
     psf /= psf.sum()
@@ -532,11 +521,11 @@ def richardson_lucy_fft(img, psf, num_iter=5, epsilon=1e-3, beta=0.0, initial_gu
         return xp.fft.irfftn(xp.fft.rfftn(x, s=shape, axes=axes) * psf_ft_conj, s=shape, axes=axes)
 
     return richardson_lucy_generic(
-        img, convolve, correlate, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess, backend=B
+        img, convolve, correlate, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess
     )
 
 
-def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None, backend=None):
+def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None):
     """Richardson-Lucy deconvolution using Gaussian convolution operations
 
     Args:
@@ -545,12 +534,11 @@ def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0, in
         num_iter (int): number of iterations
         epsilon (float): small constant to prevent divide-by-zero
         beta (float): acceleration parameter (0 = no acceleration)
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: deconvolved image (NumPy if ``img`` was a NumPy array)
     """
-    B = resolve_backend(img, backend)
+    B = current_backend()
     return richardson_lucy_generic(
         img,
         lambda x: B.gaussian_filter(x, sigmas),
@@ -558,13 +546,10 @@ def richardson_lucy_gaussian(img, sigmas, num_iter=5, epsilon=1e-3, beta=0.0, in
         epsilon=epsilon,
         beta=beta,
         initial_guess=initial_guess,
-        backend=B,
     )
 
 
-def richardson_lucy_gaussian_shear(
-    img, sigmas, shear, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None, backend=None
-):
+def richardson_lucy_gaussian_shear(img, sigmas, shear, num_iter=5, epsilon=1e-3, beta=0.0, initial_guess=None):
     """Richardson-Lucy deconvolution using a sheared Gaussian psf
 
     Args:
@@ -574,16 +559,13 @@ def richardson_lucy_gaussian_shear(
         num_iter (int): number of iterations
         epsilon (float): small constant to prevent divide-by-zero
         beta (float): acceleration parameter (0 = no acceleration)
-        backend (str or ArrayBackend, optional): backend to compute on (see module docstring)
 
     Returns:
         array_like: deconvolved image (NumPy if ``img`` was a NumPy array)
     """
-    B = resolve_backend(img, backend)
+    B = current_backend()
     if shear == 0:
-        return richardson_lucy_gaussian(
-            img, sigmas, num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess, backend=B
-        )
+        return richardson_lucy_gaussian(img, sigmas, num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess)
 
     gw = gausskernel_sheared(np.array(sigmas), shear=shear, truncate=4).astype("float32")
     gw01 = gw.sum(2)[:, :, None]
@@ -592,5 +574,5 @@ def richardson_lucy_gaussian_shear(
     gw2 /= gw2.sum()
     conv_shear = lambda vol: B.convolve_leading(B.convolve_leading(vol, gw01, mode="reflect"), gw2, mode="reflect")
     return richardson_lucy_generic(
-        img, conv_shear, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess, backend=B
+        img, conv_shear, num_iter=num_iter, epsilon=epsilon, beta=beta, initial_guess=initial_guess
     )

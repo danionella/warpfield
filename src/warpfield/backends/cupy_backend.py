@@ -30,7 +30,9 @@ class CupyBackend(NumpyBackend):
         return self.xp.asarray(self._host_if_foreign(x), dtype=self.dtype(dtype), order="C")
 
     def to_numpy(self, x):
-        return x.get() if self.is_array(x) else np.asarray(self._host_if_foreign(x))
+        if self.is_array(x) or hasattr(x, "__cuda_array_interface__"):  # incl. other CUDA arrays (see backend_of)
+            return self.xp.asarray(x).get()
+        return np.asarray(self._host_if_foreign(x))
 
     # ------------------------------------------------------------- warp kernel
     def warp_volume(self, vol, disp_field, disp_scale, disp_offset, out=None):

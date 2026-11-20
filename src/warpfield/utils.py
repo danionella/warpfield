@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import h5py
 import warnings
 import hdf5plugin
@@ -11,48 +12,77 @@ from pathlib import Path
 
 from .backends import available_array_backends as get_available_backends  # noqa: F401 (public name)
 from .backends import backend_of
-from .backends import set_default_array_backend as set_default_backend  # noqa: F401 (public name)
+from .backends import set_array_backend as set_backend  # noqa: F401 (public name)
+
+
+def _split_container_path(file_path, extensions, is_dir=False):
+    """Split ``file.ext:name`` or ``file.ext/name`` into ``("file.ext", "name")``, for formats that hold several
+    datasets (HDF5, MATLAB, Zarr). ``name`` is None if the path ends at the file. Returns None if no extension in
+    ``extensions`` matches.
+
+    If several parts of the path end in a matching extension (e.g. a folder ``exp.h5/`` holding ``x.h5``), the first
+    one that exists on disk as a file (as a folder if ``is_dir``, for Zarr stores) is taken. If none does but the
+    whole path is a file (e.g. ``exp.h5/x.tif``), it is not this format: None.
+    """
+    # separators: ":" and "/", and "\\" for Windows paths such as str(Path("data.zarr") / "array")
+    pattern = r"\.(?:%s)(?=[:/\\]|$)" % "|".join(re.escape(e.lstrip(".")) for e in extensions)
+    candidates = []
+    for m in re.finditer(pattern, file_path):
+        name = file_path[m.end() + 1 :].replace("\\", "/") if m.end() < len(file_path) else None
+        candidates.append((file_path[: m.end()], name or None))
+    if not candidates:
+        return None
+    exists = os.path.isdir if is_dir else os.path.isfile
+    found = next((c for c in candidates if exists(c[0])), None)
+    if found is None and os.path.isfile(file_path):
+        return None
+    return found or candidates[0]
+
+
+def _not_a_group(obj, what):
+    """Raise if ``obj`` (an h5py or zarr object) is a group rather than an array, naming what it contains."""
+    is_group = isinstance(obj, h5py.Group) or type(obj).__name__ == "Group"  # zarr.Group, without importing zarr
+    if is_group:
+        names = ", ".join(sorted(obj.keys())) or "nothing"
+        raise ValueError(f"{what} is a group, not an array. Give one of its members after it: {names}")
+    return obj
 
 
 def load_data(file_path: str):
     """
-    Import data from various file types, including .npy, .nii, .h5, .mat, DICOM, and TIFF.
+    Import data from various file types, including .npy, .nii, .h5, .mat, .zarr, DICOM, and TIFF.
 
     Args:
-        file_path (str): Path to the file. For HDF5 and MATLAB files, you can specify the group/key or variable
-                         using the format '/path/to/file.h5:/group/key' or '/path/to/file.mat:variable_name'.
+        file_path (str): Path to the file. For HDF5, MATLAB and Zarr files, add the dataset, variable or array
+                         after the file name, separated by ``:`` or ``/``: ``/path/to/file.h5:group/dataset``,
+                         ``/path/to/file.h5/group/dataset``, ``/path/to/file.mat:variable`` or
+                         ``/path/to/store.zarr/array``. A Zarr store that is itself an array needs no name.
 
     Returns:
         - data (np.ndarray): Loaded data as a NumPy array.
-        - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin).
+        - metadata (dict): Dictionary containing metadata (e.g., scale, orientation, origin). ``path`` is the file
+          (or Zarr store) on disk and ``key`` the dataset, variable or array inside it.
     """
     if isinstance(file_path, Path):
         file_path = str(file_path)
+
+    hdf5 = _split_container_path(file_path, [".h5", ".hdf5"])
+    matlab = _split_container_path(file_path, [".mat"])
+    zarr_path = _split_container_path(file_path, [".zarr"], is_dir=True)
 
     if file_path.endswith(".npy"):
         data = np.load(file_path).copy()
         return data, dict(filetype="npy", path=file_path, meta={})
 
-    elif ".h5:" in file_path or ".hdf5:" in file_path:
-        split_index = file_path.rfind(":")  # Find the last colon
-        file_path, key = file_path[:split_index], file_path[split_index + 1 :]
+    elif hdf5 is not None:
+        file_path, key = hdf5
+        if key is None:
+            raise ValueError(f"Add the dataset to the HDF5 path, e.g. {file_path}:dataset or {file_path}/dataset")
         with h5py.File(file_path, "r") as f:
-            data = np.array(f[key])
-            attrs = dict(f[key].attrs)  # Extract attributes as metadata
+            dset = _not_a_group(f[key], f"{key} in {file_path}")
+            data = np.array(dset)
+            attrs = dict(dset.attrs)  # Extract attributes as metadata
         return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
-
-    elif ".h5/" in file_path or ".hdf5/" in file_path:
-        base, key = file_path.split(".h5/", 1) if ".h5/" in file_path else file_path.split(".hdf5/", 1)
-        file_path = base + (".h5" if ".h5/" in file_path else ".hdf5")
-        with h5py.File(file_path, "r") as f:
-            data = np.array(f[key])
-            attrs = dict(f[key].attrs)
-        return data, dict(filetype="hdf5", path=file_path, key=key, meta=attrs)
-
-    elif file_path.endswith(".h5") or file_path.endswith(".hdf5") or file_path.endswith(".mat"):
-        raise ValueError(
-            f"File path {file_path} was provided without dataset key (example: /path/to/file.h5:dataset_name)"
-        )
 
     elif file_path.endswith(".nii") or file_path.endswith(".nii.gz"):
         try:
@@ -94,15 +124,27 @@ def load_data(file_path: str):
         }
         return data, dict(filetype="dicom", path=file_path, meta=metadata)
 
-    elif ".mat:" in file_path:
+    elif matlab is not None:
         from scipy.io import loadmat
+        from scipy.io.matlab import matfile_version
 
-        file_path, variable_name = file_path.split(":", 1)
-        mat_data = loadmat(file_path)
-        if variable_name not in mat_data:
-            raise ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
-        data = mat_data[variable_name]
-        return data, dict(filetype="matlab", path=file_path, key=key, meta=mat_data[variable_name].attrs)
+        file_path, variable_name = matlab
+        if variable_name is None:
+            raise ValueError(f"Add the variable to the MATLAB path, e.g. {file_path}:variable or {file_path}/variable")
+        not_found = ValueError(f"Variable '{variable_name}' not found in MATLAB file '{file_path}'")
+        if matfile_version(file_path)[0] == 2:
+            # v7.3 (MATLAB's format for variables over 2 GB) is HDF5. MATLAB stores arrays in column-major order,
+            # so HDF5 sees the axes reversed: transpose to get the array as MATLAB (and loadmat) shows it.
+            with h5py.File(file_path, "r") as f:
+                if variable_name not in f:
+                    raise not_found
+                data = np.array(_not_a_group(f[variable_name], f"{variable_name} in {file_path}")).T
+        else:
+            mat_data = loadmat(file_path, variable_names=[variable_name])
+            if variable_name not in mat_data:
+                raise not_found
+            data = mat_data[variable_name]
+        return data, dict(filetype="matlab", path=file_path, key=variable_name, meta={})
 
     elif file_path.endswith(".nrrd") or file_path.endswith(".nhdr"):
         try:
@@ -112,15 +154,18 @@ def load_data(file_path: str):
         data, header = nrrd.read(file_path)
         return data, dict(filetype="nrrd", path=file_path, meta=header)
 
-    elif ".zarr" in file_path or ".n5" in file_path:
+    elif zarr_path is not None:
         try:
             import zarr
         except ImportError:
-            raise ImportError("The 'zarr' package is required to load Zarr/N5 files. Please install it.")
-        arr = zarr.open(file_path, mode="r")
+            raise ImportError("The 'zarr' package is required to load Zarr files. Please install it.")
+        # The store (x.zarr) is what sits on disk, so report it as the path: the CLI's default output then goes next
+        # to the store, not inside it.
+        file_path, key = zarr_path
+        arr = _not_a_group(zarr.open(file_path, mode="r", path=key or ""), f"{key or 'The store'} in {file_path}")
         data = np.array(arr)
         meta = dict(getattr(arr, "attrs", {}))
-        return data, dict(filetype="zarr", path=file_path, meta=meta)
+        return data, dict(filetype="zarr", path=file_path, key=key, meta=meta)
 
     else:
         raise ValueError(f"Unsupported file type: {file_path}")

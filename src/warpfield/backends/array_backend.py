@@ -18,17 +18,11 @@ Rules for shared code:
 - call ``B.end_step(...)`` after each registration step, and ``B.eval(...)`` where intermediates should be
   computed early to bound memory; on lazy backends (MLX) they force computation, elsewhere they do nothing
 
-Where code runs. There are two kinds of functions, with different rules:
-
-- **Entry points**, which users call with their own data (``register_volumes``, ``WarpMap`` and its methods,
-  ``warpfield.warp.warp_volume``, the ``ndimage`` functions, ...). They compute on the backend given by
-  ``backend=``, else on the backend of a CuPy/MLX input, else on the default GPU backend
-  (``resolve_backend``), and return results in the type of the input (``like_input``), so NumPy in gives
-  NumPy out.
-- **Pipeline pieces**, which the registration calls on arrays that are already on its backend (``Projector``,
-  ``Smoother``, ``RegFilter`` and custom callables in a ``Recipe``). They compute on the backend of their
-  input (``backend_of``). This keeps ``backend="numpy"`` on the CPU and lets custom callables keep the
-  ``f(vol_blocks, axis)`` signature.
+Where code runs. warpfield runs on one backend per process (``current_backend()``: the one set with
+``warpfield.set_backend``, else the first usable GPU backend). Public functions and classes (``register_volumes``,
+``WarpMap``, the ``ndimage`` functions, the ``Recipe`` pieces ``RegFilter``, ``Projector``, ``Smoother``, ...)
+compute on it and return results in the type of their input (``like_input``), so NumPy in gives NumPy out. A
+``WarpMap`` also uses the current backend: after a switch, its arrays are converted the first time they are used.
 
 Inside the pipeline (``WarpMapper``, ``RegistrationPyramid``), everything stays on ``B``: use ``B.*``
 methods (and private helpers such as ``WarpMap._warp``) rather than entry points, and pass whatever user

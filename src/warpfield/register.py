@@ -7,10 +7,10 @@ from typing import Any, Callable, List, Union
 import h5py
 import numpy as np
 import scipy.signal
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError
 from tqdm.auto import tqdm
 
-from .backends import backend_of, get_array_backend, like_input, resolve_backend
+from .backends import backend_of, current_backend, like_input
 from .ndimage import (
     accumarray,
     dogfilter,
@@ -27,7 +27,8 @@ _ArrayType = Any  # numpy, cupy or mlx array
 
 
 class _BackendArray:
-    """Attribute stored as a float32 array of its owner's backend (``owner.B``), converted on assignment.
+    """Attribute stored as a float32 array of its owner's backend (``owner.B``, the current backend), converted on
+    assignment. After a switch with ``warpfield.set_backend``, it is converted again the first time it is read.
 
     The map owns its arrays (as on main): an assigned array that is already on the backend is copied, so in-place
     updates such as ``wm.warp_field *= 0.5`` never change the caller's arrays or another WarpMap's. (Conversion
@@ -38,7 +39,13 @@ class _BackendArray:
         self.attr = "_" + name
 
     def __get__(self, obj, objtype=None):
-        return self if obj is None else getattr(obj, self.attr)
+        if obj is None:
+            return self
+        arr, B = getattr(obj, self.attr), obj.B
+        if not B.is_array(arr):  # created before a backend switch: move it once (converting makes a new array)
+            arr = B.asarray(arr, B.float32)
+            setattr(obj, self.attr, arr)
+        return arr
 
     def __set__(self, obj, value):
         B = obj.B
@@ -55,16 +62,18 @@ class WarpMap:
         block_stride (3-element list or array):
         ref_shape (tuple): shape of the reference volume
         mov_shape (tuple): shape of the moving volume
-        backend (str or ArrayBackend, optional): "cupy", "mlx" or "numpy". Default: the backend of
-            ``warp_field`` if it is a CuPy or MLX array, else the default GPU backend.
     """
 
     warp_field = _BackendArray()
     block_size = _BackendArray()
     block_stride = _BackendArray()
 
-    def __init__(self, warp_field, block_size, block_stride, ref_shape, mov_shape, backend=None):
-        self.B = resolve_backend(warp_field, backend)
+    @property
+    def B(self):
+        """The backend the map computes on: always the current one (see ``warpfield.set_backend``)."""
+        return current_backend()
+
+    def __init__(self, warp_field, block_size, block_stride, ref_shape, mov_shape):
         self.warp_field = warp_field  # copied as needed by _BackendArray
         self.block_size = block_size
         self.block_stride = block_stride
@@ -72,10 +81,10 @@ class WarpMap:
         self.mov_shape = tuple(int(s) for s in mov_shape)
 
     def _new(self, warp_field, block_size, block_stride, ref_shape=None, mov_shape=None):
-        """New WarpMap on the same backend."""
+        """New WarpMap with the same shapes unless given."""
         ref_shape = self.ref_shape if ref_shape is None else ref_shape
         mov_shape = self.mov_shape if mov_shape is None else mov_shape
-        return WarpMap(warp_field, block_size, block_stride, ref_shape, mov_shape, backend=self.B)
+        return WarpMap(warp_field, block_size, block_stride, ref_shape, mov_shape)
 
     def _hp(self, x):
         """``x`` as a high-precision backend array (float64 where the device has it, as on CuPy)."""
@@ -259,9 +268,10 @@ class WarpMap:
             detJ: array of the spatial shape of the displacement field
         """
         B, xp = self.B, self.B.xp
-        scaling = B.asarray(units_per_voxel, B.float32) * self.block_stride
+        units = B.asarray(units_per_voxel, B.float32)
+        scaling = units * self.block_stride
         coords = B.indices(self.warp_field.shape[1:], B.float32) * scaling[:, None, None, None]
-        phi = coords + self.warp_field
+        phi = coords + self.warp_field * units[:, None, None, None]  # the displacement is in voxels
         spacing = [float(s) for s in B.to_numpy(scaling)]
         rows = [xp.stack(B.gradient(phi[i], *spacing, edge_order=edge_order), axis=-1) for i in range(3)]
         return B.det(xp.stack(rows, axis=-2))
@@ -325,14 +335,13 @@ class WarpMap:
             grp.attrs["class"] = "WarpMap"
 
     @classmethod
-    def from_h5(cls, h5_path, group="warp_map", backend=None):
+    def from_h5(cls, h5_path, group="warp_map"):
         """
         Load a WarpMap from an HDF5 file.
 
         Args:
             h5_path (str or os.PathLike): Path to the HDF5 file.
             group (str): Group path inside the HDF5 file where the WarpMap is stored.
-            backend (str or ArrayBackend, optional): backend for the loaded WarpMap (default: default GPU backend)
 
         Returns:
             WarpMap: The loaded WarpMap object.
@@ -344,7 +353,7 @@ class WarpMap:
             block_stride = grp["block_stride"][:]
             ref_shape = tuple(grp["ref_shape"][:].tolist())
             mov_shape = tuple(grp["mov_shape"][:].tolist())
-        return cls(warp_field, block_size, block_stride, ref_shape, mov_shape, backend=backend)
+        return cls(warp_field, block_size, block_stride, ref_shape, mov_shape)
 
 
 def _own_output(out, buf):
@@ -368,27 +377,17 @@ class WarpMapper:
         ref_vol (array_like): The reference volume
         block_size (3-element list or numpy.array): shape of blocks, whose rigid displacement is estimated
         block_stride (3-element list or numpy.array): stride (usually identical to block_size)
-        proj_method (callable): Projection method, called as ``proj_method(vol_blocks, axis)``
-        backend (str or ArrayBackend, optional): backend to compute on (default: backend of ``ref_vol`` if it
-            is a CuPy or MLX array, else the default GPU backend)
+        proj_method (callable): Projection method, called as ``proj_method(vol_blocks, axis=axis)``
     """
 
     def __init__(
-        self,
-        ref_vol,
-        block_size,
-        block_stride=None,
-        proj_method=None,
-        subpixel=4,
-        epsilon=1e-6,
-        tukey_alpha=0.5,
-        backend=None,
+        self, ref_vol, block_size, block_stride=None, proj_method=None, subpixel=4, epsilon=1e-6, tukey_alpha=0.5
     ):
         if np.any(block_size > np.array(ref_vol.shape)):
             raise ValueError(
                 f"Block size (currently: {block_size}) must be smaller than the volume shape ({np.array(ref_vol.shape)})."
             )
-        self.B = resolve_backend(ref_vol, backend)
+        self.B = current_backend()
         self.proj_method = proj_method
         self.subpixel = subpixel
         self.epsilon = epsilon
@@ -402,7 +401,7 @@ class WarpMapper:
         block_stride = block_size if block_stride is None else np.array(block_stride)
         ref_blocks = B.sliding_block(B.asarray(ref_vol, B.float32), block_size, block_stride)
         self.blocks_shape = ref_blocks.shape
-        ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, iax), B.float32) for iax in [-3, -2, -1]]
+        ref_blocks_proj = [B.asarray(self.proj_method(ref_blocks, axis=iax), B.float32) for iax in [-3, -2, -1]]
         if self.tukey_alpha is not None and self.tukey_alpha > 0:  # alpha 0 is a rectangular window (no change)
             alpha = float(self.tukey_alpha)
             ref_blocks_proj = [
@@ -429,7 +428,7 @@ class WarpMapper:
         """
         B, xp = self.B, self.B.xp
         vol_blocks = B.sliding_block(vol, self.block_size, self.block_stride)
-        vol_blocks_proj = [B.asarray(self.proj_method(vol_blocks, iax), B.float32) for iax in [-3, -2, -1]]
+        vol_blocks_proj = [B.asarray(self.proj_method(vol_blocks, axis=iax), B.float32) for iax in [-3, -2, -1]]
         del vol_blocks
 
         disp_field = []
@@ -468,7 +467,7 @@ class WarpMapper:
                 disp_field[0][1] + disp_field[1][1],
             ]
         ).astype(B.float32) / 2
-        return WarpMap(disp_field, self.block_size, self.block_stride, self.ref_shape, vol.shape, backend=B)
+        return WarpMap(disp_field, self.block_size, self.block_stride, self.ref_shape, vol.shape)
 
 
 class RegistrationPyramid:
@@ -479,13 +478,11 @@ class RegistrationPyramid:
         recipe (Recipe): Registration recipe.
             IMPORTANT: the block size in the last level cannot be larger than the block_size in any previous level.
         reg_mask (array_like): Mask for registration
-        backend (str or ArrayBackend, optional): "cupy", "mlx" or "numpy". Default: backend of ``ref_vol`` if it
-            is a CuPy or MLX array, else the default GPU backend.
     """
 
-    def __init__(self, ref_vol, recipe, reg_mask=1, backend=None):
-        recipe.model_validate(recipe.model_dump())
-        self.B = B = resolve_backend(ref_vol, backend)
+    def __init__(self, ref_vol, recipe, reg_mask=1):
+        _check_recipe(recipe)
+        self.B = B = current_backend()
         self.recipe = recipe
         self.reg_mask = B.asarray(reg_mask, B.float32)
         self.mappers = []
@@ -512,7 +509,6 @@ class RegistrationPyramid:
                     block_stride=block_stride,
                     proj_method=recipe.levels[i].project,
                     tukey_alpha=recipe.levels[i].tukey_ref,
-                    backend=B,
                 )
             )
             self.mapper_ix.append(i)
@@ -530,11 +526,16 @@ class RegistrationPyramid:
             - warp_map (WarpMap): Displacement field
             - callback_output (list): List of outputs from the callback function
         """
+        if self.B is not current_backend():
+            raise RuntimeError(
+                f"This RegistrationPyramid was created on the {self.B.name} backend, but warpfield now runs on "
+                f"{current_backend().name} (warpfield.set_backend). Create a new RegistrationPyramid."
+            )
         B = self.B
         vol_in = vol
         vol = B.asarray(vol, B.float32)
         offsets = (np.array(vol.shape) - np.array(self.ref_shape)) / 2
-        warp_map = WarpMap(offsets[:, None, None, None], np.ones(3), np.ones(3), self.ref_shape, vol.shape, backend=B)
+        warp_map = WarpMap(offsets[:, None, None, None], np.ones(3), np.ones(3), self.ref_shape, vol.shape)
         warp_map = warp_map.resize_to(self.mappers[-1])
         callback_output = []
         vol_tmp0 = self.recipe.pre_filter(vol, reg_mask=self.reg_mask) if self.recipe.pre_filter is not None else vol
@@ -585,9 +586,7 @@ class RegistrationPyramid:
         self.B.clear_cache()
 
 
-def register_volumes(
-    ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_path=None, vmax=None, backend="auto"
-):
+def register_volumes(ref, vol, recipe, reg_mask=1, callback=None, verbose=True, video_path=None, vmax=None):
     """Register a volume to a reference volume using a registration pyramid.
 
     Args:
@@ -602,17 +601,16 @@ def register_volumes(
         verbose (bool): If True, show progress bars. Default is True
         video_path (str): Save a video of the registration process, using callback outputs. The callback has to return 2D frames. Default is None.
         vmax (float): Maximum pixel value (to scale video brightness). If none, set to 99.9 percentile of pixel values.
-        backend (str): "auto" (default: the first available of "cupy" and "mlx"), "cupy", "mlx" or "numpy" (CPU, slow).
 
     Returns:
         - numpy, cupy or mlx array (depending on vol input): Registered volume
         - WarpMap: Displacement field
         - list: List of outputs from the callback function
     """
-    recipe.model_validate(recipe.model_dump())
+    _check_recipe(recipe)
     if video_path is not None and callback is None:
         raise ValueError("video_path needs a callback that returns 2D frames, e.g. warpfield.utils.mips_callback()")
-    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask, backend=backend)
+    reg = RegistrationPyramid(ref, recipe, reg_mask=reg_mask)
     B = reg.B
     registered_vol, warp_map, cbout = reg.register_single(vol, callback=callback, verbose=verbose)
     reg.clean_up()
@@ -635,10 +633,31 @@ def register_volumes(
     return registered_vol, warp_map, cbout
 
 
+def _check_recipe(model, where="recipe"):
+    """Check a recipe (or any recipe part) for values that became invalid after it was created, e.g.
+    ``recipe.levels[0].repeats = "x"`` or an in-place change to a list setting.
+
+    Each model, also nested ones, is checked against the warpfield class it is or derives from, with that class's
+    settings only: a subclass of a recipe piece (e.g. a ``Projector`` with its own settings, ``__init__`` or
+    validators) is the subclass's business, as on 0.2. Unknown keys in YAML files and dicts are rejected when they
+    are parsed (``extra="forbid"``).
+    """
+    if isinstance(model, BaseModel):
+        base = next((c for c in type(model).__mro__ if c in _RECIPE_CLASSES), None)
+        if base is not None:
+            try:  # nested models are passed as they are (pydantic accepts instances) and checked below
+                base.model_validate({name: getattr(model, name) for name in base.model_fields})
+            except ValidationError as e:
+                raise ValueError(f"Invalid setting in {where}:\n{e}") from None
+        for name in type(model).model_fields:
+            _check_recipe(getattr(model, name), f"{where}.{name}")
+    elif isinstance(model, (list, tuple)):
+        for i, item in enumerate(model):
+            _check_recipe(item, f"{where}[{i}]")
+
+
 class Projector(BaseModel):
     """A class to apply a 2D projection and filters to a volume block.
-
-    Runs on the backend of its input (see ``RegFilter``).
 
     Parameters:
         max: if True, apply a max filter to the volume block. Default is True
@@ -648,6 +667,8 @@ class Projector(BaseModel):
         high: the higher sigma value for the DoG filter. Default is 10.0
         periodic_smooth: if True, apply periodic-smooth decomposition to the projections. Default is False
     """
+
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
 
     max: bool = True
     normalize: Union[bool, float] = False
@@ -664,32 +685,35 @@ class Projector(BaseModel):
         Returns:
             array_like: Projected volume block (5D dataset, with the first 3 dimensions being blocks and the last 2 dimensions being 2D projections)
         """
-        B = backend_of(vol_blocks)
+        B = current_backend()
         xp = B.xp
+        vol_in = vol_blocks
+        if not B.is_array(vol_blocks):  # e.g. NumPy; arrays on the backend stay as they are (asarray would copy views)
+            vol_blocks = B.asarray(vol_blocks)
         out = vol_blocks.max(axis) if self.max else vol_blocks.mean(axis)
         if self.periodic_smooth:
-            out = periodic_smooth_decomposition_nd_rfft(out, backend=B)
+            out = periodic_smooth_decomposition_nd_rfft(out)
         low = np.delete(np.r_[1, 1, 1] * self.low, axis)
         high = np.delete(np.r_[1, 1, 1] * self.high, axis)
         if self.dog:
-            out = dogfilter(out, [0, 0, 0, *low], [0, 0, 0, *high], mode="reflect", backend=B)
+            out = dogfilter(out, [0, 0, 0, *low], [0, 0, 0, *high], mode="reflect")
         elif not np.all(np.array(self.low) == 0):
             out = B.gaussian_filter(out, [0, 0, 0, *low], mode="reflect", truncate=5.0)
         if self.normalize > 0:
             out /= xp.sqrt(xp.sum(out**2, axis=(-2, -1), keepdims=True)) ** self.normalize + 1e-9
-        return out
+        return like_input(out, vol_in)
 
 
 class Smoother(BaseModel):
     """Smooth blocks with a Gaussian kernel.
-
-    Runs on the backend of its input (see ``RegFilter``).
 
     Args:
         sigmas (list): [sigma0, sigma1, sigma2]. If None, no smoothing is applied.
         shear (float): shear parameter for gaussian kernel. Default is None.
         long_range_ratio (float): long range ratio for double gaussian kernel. Default is 0.05.
     """
+
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
 
     sigmas: Union[float, List[float]] = [1.0, 1.0, 1.0]
     shear: Union[float, None] = None
@@ -703,10 +727,13 @@ class Smoother(BaseModel):
         Returns:
             array_like: smoothed cross-correlation volume
         """
-        B = backend_of(xcorr_proj)
-        truncate = 4.0
         if self.sigmas is None:
             return xcorr_proj
+        B = current_backend()
+        truncate = 4.0
+        xcorr_in = xcorr_proj
+        if not B.is_array(xcorr_proj):
+            xcorr_proj = B.asarray(xcorr_proj)
         sigmas = [float(s) for s in np.broadcast_to(self.sigmas, 3)]  # a single number applies to all axes
         if self.shear is not None:
             shear_blocks = self.shear * (block_size[1] / block_size[0])
@@ -722,15 +749,11 @@ class Smoother(BaseModel):
                 B.gaussian_filter(xcorr_proj, long_range_sigmas, mode="constant", truncate=truncate)
                 * self.long_range_ratio
             )
-        return xcorr_proj
+        return like_input(xcorr_proj, xcorr_in)
 
 
 class RegFilter(BaseModel):
     """A class to apply a filter to the volume before registration.
-
-    Like ``Projector`` and ``Smoother``, this runs on the backend of its input: inside a registration the input
-    is already on the GPU, but calling ``recipe.pre_filter(vol)`` by hand on a NumPy array runs on the CPU, which
-    is slow for large volumes. Pass ``backend="auto"`` (or move ``vol`` to the GPU first) to filter on the GPU.
 
     Parameters:
         clip_thresh: threshold for clipping the reference volume. Default is 0
@@ -740,31 +763,31 @@ class RegFilter(BaseModel):
         soft_edge: size of a soft (Tukey) edge applied to the volume, in voxels. Default is 0
     """
 
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
+
     clip_thresh: float = 0
     dog: bool = True
     low: float = 0.5
     high: float = 10.0
     soft_edge: Union[Union[int, float], List[Union[int, float]]] = 0.0
 
-    def __call__(self, vol, reg_mask=None, backend=None):
+    def __call__(self, vol, reg_mask=None):
         """Apply the filter to the volume
         Args:
             vol (array_like): 3D volume to be filtered
             reg_mask (array): Mask for registration
-            backend (str or ArrayBackend, optional): backend to compute on. Default: the backend of ``vol``
-                (so NumPy input runs on the CPU; pass e.g. backend="auto" to use the GPU).
         Returns:
             array_like: Filtered volume (NumPy if ``vol`` was a NumPy array)
         """
-        B = backend_of(vol) if backend is None else get_array_backend(backend)
+        B = current_backend()
         vol_in = vol
         vol = B.xp.maximum(B.asarray(vol, B.float32) - self.clip_thresh, 0)
         if np.any(np.array(self.soft_edge) > 0):
-            vol = soften_edges(vol, soft_edge=self.soft_edge, copy=False, backend=B)
+            vol = soften_edges(vol, soft_edge=self.soft_edge, copy=False)
         if reg_mask is not None:
             vol *= B.asarray(reg_mask, B.float32)
         if self.dog:
-            vol = dogfilter(vol, self.low, self.high, mode="reflect", backend=B)
+            vol = dogfilter(vol, self.low, self.high, mode="reflect")
         return like_input(vol, vol_in)
 
 
@@ -775,7 +798,8 @@ class LevelConfig(BaseModel):
         block_size (list): shape of blocks, whose rigid displacement is estimated
         block_stride (list): stride (usually identical to block_size)
         repeats (int): number of iterations for this level (deisable level by setting repeats to 0)
-        smooth (Smoother or None): Smoother object
+        smooth (Smoother, callable or None): Smoother object. A callable is called as ``f(xcorr_proj, block_size)``
+            and returns the smoothed cross-correlation.
         project (Projector, callable or None): Projector object. The callable should take a volume block and an axis as input and return a projected volume block.
         tukey_ref (float): if not None, apply a Tukey window to the reference volume (alpha = tukey_ref). Default is 0.5
         affine (bool): if True, apply affine transformation to the displacement field
@@ -783,11 +807,13 @@ class LevelConfig(BaseModel):
         update_rate (float): update rate for the displacement field. Default is 1.0. Can be lowered to dampen oscillations.
     """
 
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
+
     block_size: Union[List[int]]
     block_stride: Union[List[int], float] = 1.0
     project: Union[Projector, Callable[[_ArrayType, int], _ArrayType]] = Projector()
     tukey_ref: Union[float, None] = 0.5
-    smooth: Union[Smoother, None] = Smoother()
+    smooth: Union[Smoother, Callable[[_ArrayType, Any], _ArrayType], None] = Smoother()
     affine: bool = False
     median_filter: bool = True
     update_rate: float = 1.0
@@ -801,6 +827,8 @@ class Recipe(BaseModel):
         reg_filter (RegFilter, callable or None): Filter to be applied to the reference volume
         levels (list): List of LevelConfig objects
     """
+
+    model_config = ConfigDict(extra="forbid")  # a misspelled setting raises instead of being ignored
 
     pre_filter: Union[RegFilter, Callable[[_ArrayType], _ArrayType], None] = RegFilter()
     levels: List[LevelConfig] = [
@@ -874,3 +902,6 @@ class Recipe(BaseModel):
         with open(yaml_path, "w") as f:
             yaml.dump(self.model_dump(), f)
         print(f"Recipe saved to {yaml_path}")
+
+
+_RECIPE_CLASSES = (Projector, Smoother, RegFilter, LevelConfig, Recipe)  # checked by _check_recipe

@@ -1,24 +1,24 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "warpfield"
-version = "0.2.2"
+version = "0.3.0"
 description = "GPU-accelerated 3D non-rigid registration"
 authors = [
     { name = "jlab.berlin" },
     { name = "Maximilian Hoffmann" },
     { name = "Benjamin Judkewitz" },
 ]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 keywords = ["warpfield", "python"]
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",
-    "cupy-cuda12x; platform_system != 'Darwin'",
     "mlx>=0.32.4; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tqdm",
     "pydantic",
@@ -33,11 +33,19 @@ dependencies = [
     "pynrrd",
     "zarr",
 ]
+
 classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
 ]
+
+[project.optional-dependencies]
+# NVIDIA GPUs: pick the extra that matches your CUDA driver (`nvidia-smi` shows the highest CUDA version it
+# supports). [ctk] brings the CUDA libraries, so no separate CUDA Toolkit install is needed. Not part of the base
+# install, so that an existing CuPy (e.g. on Google Colab, or from conda) is not replaced by a mismatched one.
+cuda12 = ["cupy-cuda12x[ctk]>=14"]
+cuda13 = ["cupy-cuda13x[ctk]>=14"]
 
 [project.urls]
 Homepage = "https://github.com/danionella/warpfield"

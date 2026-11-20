@@ -4,10 +4,10 @@ from .array_backend import COMMON_XP, ArrayBackend
 from .selection import (
     available_array_backends,
     backend_of,
+    current_backend,
     get_array_backend,
     like_input,
-    resolve_backend,
-    set_default_array_backend,
+    set_array_backend,
 )
 
 __all__ = [
@@ -15,8 +15,8 @@ __all__ = [
     "COMMON_XP",
     "available_array_backends",
     "backend_of",
+    "current_backend",
     "get_array_backend",
     "like_input",
-    "resolve_backend",
-    "set_default_array_backend",
+    "set_array_backend",
 ]
