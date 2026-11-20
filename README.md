@@ -21,7 +21,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Python API and command-line interface (CLI)
-- Support for `.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff` and `.npy` file formats
+- Support for `.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff`, `.mat` and `.npy` file formats
 
 ### General Principle
 
@@ -149,7 +149,7 @@ python -m warpfield --help
 
 #### Required Arguments
 
-- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff`, `.npy`). For HDF5 files, specify the dataset as `filename.h5:dataset_name` (or `filename.h5/dataset_name`). For Zarr, give the path to the array, not to a group.
+- `--fixed`: Path to the fixed 3D volume file (`.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff`, `.mat`, `.npy`). For HDF5 files, specify the dataset as `filename.h5:dataset_name` (or `filename.h5/dataset_name`), and for MATLAB files the variable as `filename.mat:variable_name`. For Zarr, give the path to the array, not to a group.
 - `--moving`: Path to the moving 3D volume file.
 - `--recipe`: Path to the registration recipe YAML file (`.yml`).
 
