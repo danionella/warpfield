@@ -111,11 +111,11 @@ def load_data(file_path: str):
         data, header = nrrd.read(file_path)
         return data, dict(filetype="nrrd", path=file_path, meta=header)
 
-    elif ".zarr" in file_path or ".n5" in file_path:
+    elif ".zarr" in file_path:
         try:
             import zarr
         except ImportError:
-            raise ImportError("The 'zarr' package is required to load Zarr/N5 files. Please install it.")
+            raise ImportError("The 'zarr' package is required to load Zarr files. Please install it.")
         arr = zarr.open(file_path, mode="r")
         data = np.array(arr)
         meta = dict(getattr(arr, "attrs", {}))

@@ -21,7 +21,7 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Typical speedup compared to CPU-based methods: > 1000x (**seconds vs. hours** for gigavoxel volumes)
 - Forward and inverse transform of 3D volumes as well as point coordinates
 - Python API and command-line interface (CLI)
-- Support for `.h5`,`.zarr`, `.n5`, `.nii`, `.nrrd`, `.tiff` and `.npy` file formats
+- Support for `.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff` and `.npy` file formats
 
 ### General Principle
 
