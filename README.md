@@ -23,6 +23,9 @@ Links: [API documentation](http://danionella.github.io/warpfield), [GitHub repos
 - Python API and command-line interface (CLI)
 - Support for `.h5`, `.zarr`, `.nii`, `.nrrd`, `.tiff`, `.mat` and `.npy` file formats
 
+> [!TIP]
+> You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
 ### General Principle
 
 The registration process aligns a moving 3D volume to a fixed reference volume by estimating and applying a displacement field. The process is typically performed in a multi-resolution (pyramid) fashion, starting with coarse alignment and progressively refining the displacement field at finer resolutions.
@@ -112,15 +115,6 @@ points_pushed = warp_map.push_coordinates(points)
 points_pulled = warp_map.invert().push_coordinates(points) # inverse transformation
 ```
 
-### Backends
-
-warpfield runs on the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To use a different one, call `warpfield.set_backend("mlx")` (or `"cupy"`, `"numpy"`) before you start. On the command line, use `--backend`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
-
-Functions return the same array type you pass in: NumPy in, NumPy out. When calling several warpfield functions in a row, pass GPU arrays (e.g. `cupy.asarray(vol)`) to avoid copying between CPU and GPU at every call.
-
-> [!TIP]
-> You can test-run warpfield on Google Colab: <a target="_blank" href="https://colab.research.google.com/github/danionella/warpfield/blob/main/notebooks/example.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
-
 > [!IMPORTANT]
 > Fixed and moving volumes are expected to be of the same voxel size (which does not have to be isotropic). Physical units, scalings or other metadata that may be present in data files are ignored.
 >
@@ -129,6 +123,12 @@ Functions return the same array type you pass in: NumPy in, NumPy out. When call
 > ```python
 > vol_mov = warpfield.ndimage.zoom(vol_mov, zoom_factors=np.array(voxel_size_moving) / np.array(voxel_size_fixed))  # voxel sizes: 3 floats each
 > ```
+
+### Backends
+
+warpfield runs on the first available GPU backend: [CuPy](https://cupy.dev/) (NVIDIA GPUs) or [MLX](https://ml-explore.github.io/mlx/build/html/index.html) (Apple Silicon). To use a different one, call `warpfield.set_backend("mlx")` (or `"cupy"`, `"numpy"`) before you start. On the command line, use `--backend`. The `numpy` backend runs on the CPU; it is slow and mainly meant for testing. `warpfield.get_available_backends()` lists the backends that work on your machine.
+
+Functions return the same array type you pass in: NumPy in, NumPy out. When calling several warpfield functions in a row, pass GPU arrays (e.g. `cupy.asarray(vol)`) to avoid copying between CPU and GPU at every call.
 
 ## Command-Line Interface (CLI)
 
